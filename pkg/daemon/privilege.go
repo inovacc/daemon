@@ -21,8 +21,10 @@ func RequirePrivilege(cmd *cobra.Command) error {
 	if isElevatedFn() {
 		return nil
 	}
+
 	w := cmd.ErrOrStderr()
 	path := cmd.CommandPath() // e.g. "daemon svc install"
+
 	switch runtime.GOOS {
 	case "windows":
 		_, _ = fmt.Fprintf(w, "%q requires administrator privileges.\n", path)
@@ -33,5 +35,6 @@ func RequirePrivilege(cmd *cobra.Command) error {
 		_, _ = fmt.Fprintln(w, "Re-run with sudo, for example:")
 		_, _ = fmt.Fprintf(w, "  sudo %s\n", path)
 	}
+
 	return ErrNeedsPrivilege
 }

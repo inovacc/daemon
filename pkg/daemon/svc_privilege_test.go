@@ -13,22 +13,27 @@ import (
 // findSvcVerb locates a leaf verb under the `svc` parent built by AttachCommands.
 func findSvcVerb(t *testing.T, root *cobra.Command, name string) *cobra.Command {
 	t.Helper()
+
 	for _, svc := range root.Commands() {
 		if svc.Name() != "svc" {
 			continue
 		}
+
 		for _, v := range svc.Commands() {
 			if v.Name() == name {
 				return v
 			}
 		}
 	}
+
 	t.Fatalf("verb %q not found under svc", name)
+
 	return nil
 }
 
 func newTestRoot(t *testing.T) *cobra.Command {
 	t.Helper()
+
 	root := &cobra.Command{Use: "daemon"}
 	if err := AttachCommands(root, Options{
 		BinaryName: "daemon",
@@ -37,6 +42,7 @@ func newTestRoot(t *testing.T) *cobra.Command {
 	}); err != nil {
 		t.Fatalf("AttachCommands: %v", err)
 	}
+
 	return root
 }
 
@@ -44,7 +50,9 @@ var privilegedSvcVerbs = []string{"install", "uninstall", "start", "stop", "rest
 
 func TestSvcPrivilegedVerbsBlockedWhenNotElevated(t *testing.T) {
 	orig := isElevatedFn
+
 	t.Cleanup(func() { isElevatedFn = orig })
+
 	isElevatedFn = func() bool { return false }
 
 	root := newTestRoot(t)
@@ -52,12 +60,15 @@ func TestSvcPrivilegedVerbsBlockedWhenNotElevated(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			v := findSvcVerb(t, root, name)
 			v.SetContext(context.Background())
+
 			var stderr bytes.Buffer
 			v.SetErr(&stderr)
+
 			err := v.RunE(v, nil)
 			if !errors.Is(err, ErrNeedsPrivilege) {
 				t.Fatalf("svc %s RunE = %v, want ErrNeedsPrivilege", name, err)
 			}
+
 			if stderr.Len() == 0 {
 				t.Fatalf("svc %s printed no guidance", name)
 			}
@@ -68,10 +79,12 @@ func TestSvcPrivilegedVerbsBlockedWhenNotElevated(t *testing.T) {
 func TestSvcPrivilegedVerbsProceedWhenElevated(t *testing.T) {
 	origElev := isElevatedFn
 	origNew := newOSService
+
 	t.Cleanup(func() {
 		isElevatedFn = origElev
 		newOSService = origNew
 	})
+
 	isElevatedFn = func() bool { return true }
 
 	fake := &fakeOSService{status: service.StatusRunning}
@@ -85,22 +98,28 @@ func TestSvcPrivilegedVerbsProceedWhenElevated(t *testing.T) {
 		"stop":      "stop",
 		"restart":   "restart",
 	}
+
 	for _, name := range privilegedSvcVerbs {
 		t.Run(name, func(t *testing.T) {
 			v := findSvcVerb(t, root, name)
 			v.SetContext(context.Background())
+
 			var out bytes.Buffer
 			v.SetOut(&out)
 			v.SetErr(&out)
+
 			if err := v.RunE(v, nil); errors.Is(err, ErrNeedsPrivilege) {
 				t.Fatalf("svc %s returned ErrNeedsPrivilege while elevated", name)
 			}
+
 			found := false
+
 			for _, c := range fake.calls {
 				if c == want[name] {
 					found = true
 				}
 			}
+
 			if !found {
 				t.Fatalf("svc %s did not reach osService.%s when elevated; calls=%v", name, want[name], fake.calls)
 			}
@@ -111,6 +130,7 @@ func TestSvcPrivilegedVerbsProceedWhenElevated(t *testing.T) {
 func TestSvcStatusAndRunNotGated(t *testing.T) {
 	origElev := isElevatedFn
 	origNew := newOSService
+
 	t.Cleanup(func() {
 		isElevatedFn = origElev
 		newOSService = origNew
@@ -125,9 +145,11 @@ func TestSvcStatusAndRunNotGated(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			v := findSvcVerb(t, root, name)
 			v.SetContext(context.Background())
+
 			var out bytes.Buffer
 			v.SetOut(&out)
 			v.SetErr(&out)
+
 			if err := v.RunE(v, nil); errors.Is(err, ErrNeedsPrivilege) {
 				t.Fatalf("svc %s was gated but must be unprivileged", name)
 			}
@@ -140,12 +162,15 @@ func TestSvcStatusAndRunNotGated(t *testing.T) {
 // when the process is not elevated.
 func TestSvcInstallEndToEndSurfacesPrivilegeError(t *testing.T) {
 	orig := isElevatedFn
+
 	t.Cleanup(func() { isElevatedFn = orig })
+
 	isElevatedFn = func() bool { return false }
 
 	root := newTestRoot(t)
 	root.SilenceUsage = true
 	root.SilenceErrors = true
+
 	var stderr bytes.Buffer
 	root.SetOut(&stderr)
 	root.SetErr(&stderr)
@@ -155,6 +180,7 @@ func TestSvcInstallEndToEndSurfacesPrivilegeError(t *testing.T) {
 	if !errors.Is(err, ErrNeedsPrivilege) {
 		t.Fatalf("root.Execute() = %v, want ErrNeedsPrivilege", err)
 	}
+
 	if stderr.Len() == 0 {
 		t.Fatalf("expected guidance on stderr, got none")
 	}

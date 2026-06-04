@@ -27,6 +27,7 @@ func TestLoopTripsWhenNRestartsWithinWindow(t *testing.T) {
 		g.isLoop(base.Add(2 * time.Second)),
 		g.isLoop(base.Add(3 * time.Second)),
 	}
+
 	want := []bool{false, false, false, true}
 	for i := range want {
 		if got[i] != want[i] {
@@ -48,6 +49,7 @@ func TestWindowSlidesSoOldRestartsDoNotCount(t *testing.T) {
 
 func TestBackoffGrowsThenCaps(t *testing.T) {
 	g := newRestartGuard(4, 60*time.Second)
+
 	cases := []struct {
 		attempt int
 		want    time.Duration

@@ -19,12 +19,15 @@ func TestWriteReadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
+
 	if got == nil {
 		t.Fatal("Read returned nil after Write")
 	}
+
 	if got.Port != 9500 || got.Address != "localhost:9500" || got.PID != 4242 || got.Version != "v1.2.3" {
 		t.Fatalf("roundtrip mismatch: %+v", got)
 	}
+
 	if got.StartedAt.IsZero() {
 		t.Fatal("StartedAt should be stamped by Write")
 	}
@@ -32,10 +35,12 @@ func TestWriteReadRoundTrip(t *testing.T) {
 
 func TestReadMissingReturnsNilNil(t *testing.T) {
 	s := NewStore(t.TempDir())
+
 	got, err := s.Read()
 	if err != nil {
 		t.Fatalf("Read of missing file should not error, got %v", err)
 	}
+
 	if got != nil {
 		t.Fatalf("Read of missing file should be nil, got %+v", got)
 	}
@@ -43,10 +48,12 @@ func TestReadMissingReturnsNilNil(t *testing.T) {
 
 func TestWriteCreatesServerJSONInDir(t *testing.T) {
 	dir := t.TempDir()
+
 	s := NewStore(dir)
 	if err := s.Write(Info{PID: 1}); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
+
 	if _, err := os.Stat(filepath.Join(dir, "server.json")); err != nil {
 		t.Fatalf("server.json not created: %v", err)
 	}
@@ -58,10 +65,12 @@ func TestRemoveIsIdempotent(t *testing.T) {
 	if err := s.Remove(); err != nil {
 		t.Fatalf("Remove missing: %v", err)
 	}
+
 	_ = s.Write(Info{PID: 1})
 	if err := s.Remove(); err != nil {
 		t.Fatalf("Remove existing: %v", err)
 	}
+
 	got, _ := s.Read()
 	if got != nil {
 		t.Fatal("file should be gone after Remove")

@@ -48,6 +48,7 @@ func RunMonitor(ctx context.Context, opts Options) error {
 
 func (m *monitor) run(ctx context.Context) error {
 	log := m.o.logger().With(slog.String("role", "monitor"))
+
 	addr := fmt.Sprintf("localhost:%d", m.o.GRPCPort)
 	if err := m.info.Write(serverinfo.Info{
 		Address: addr,
@@ -57,21 +58,27 @@ func (m *monitor) run(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("write server info: %w", err)
 	}
+
 	log.Info("monitor started",
 		slog.Int("pid", os.Getpid()), slog.String("version", m.o.Version), slog.String("address", addr))
+
 	defer func() {
 		_ = m.info.Remove()
+
 		log.Info("monitor stopped")
 	}()
 
 	args := m.o.buildWorkerArgs()
 	attempt := 0
+
 	for {
 		if ctx.Err() != nil {
 			log.Info("monitor stopping", slog.String("reason", "context canceled"))
 			return nil
 		}
+
 		log.Debug("starting worker", slog.Int("attempt", attempt))
+
 		code := ExitStatus(m.spawn(ctx, args))
 		switch code {
 		case ExitSuccess:
@@ -79,7 +86,9 @@ func (m *monitor) run(ctx context.Context) error {
 			return nil
 		case ExitRestart:
 			log.Info("worker requested restart", slog.Int("code", code.AsInt()))
+
 			attempt = 0
+
 			continue
 		case ExitUpgrade:
 			log.Info("worker requested binary upgrade", slog.Int("code", code.AsInt()))
@@ -93,26 +102,53 @@ func (m *monitor) run(ctx context.Context) error {
 				// FAILED — degrade to the existing restart so we never kill the service.
 				log.Error("re-exec failed; falling back to restart", slog.Any("err", err))
 			}
+
 			attempt = 0
+
 			continue
-		default: // ExitError / any crash
-			if ctx.Err() != nil {
-				log.Info("monitor stopping", slog.String("reason", "context canceled"))
-				return nil
+		// ExitError, ExitNeedsPrivilege, and any unknown code are all treated as a crash:
+		// the worker is restarted subject to the fork-loop guard and backoff.
+		case ExitError, ExitNeedsPrivilege:
+			if stop, err := m.handleCrash(ctx, log, code, &attempt); stop {
+				return err
 			}
-			if m.guard.isLoop(time.Now()) {
-				log.Error("restart loop detected; aborting",
-					slog.Int("crashes", m.o.GuardSize), slog.Duration("window", m.o.GuardWindow))
-				return fmt.Errorf("restart loop detected: worker crashed %d times within %s — aborting",
-					m.o.GuardSize, m.o.GuardWindow)
+		default:
+			if stop, err := m.handleCrash(ctx, log, code, &attempt); stop {
+				return err
 			}
-			d := m.guard.backoff(attempt)
-			log.Warn("worker crashed; restarting",
-				slog.Int("code", code.AsInt()), slog.Int("attempt", attempt+1), slog.Duration("backoff", d))
-			m.sleep(d)
-			attempt++
 		}
 	}
+}
+
+// handleCrash applies the crash-restart policy for a non-clean, non-restart, non-upgrade
+// exit code. It returns stop=true (with the loop's return value) when the monitor must
+// exit — either because the context was cancelled (err=nil) or the fork-loop guard tripped
+// (err set). When stop=false the worker should be respawned after the backoff sleep, and
+// *attempt is incremented.
+func (m *monitor) handleCrash(ctx context.Context, log *slog.Logger, code ExitStatus, attempt *int) (bool, error) {
+	select {
+	case <-ctx.Done():
+		log.Info("monitor stopping", slog.String("reason", "context canceled"))
+		return true, nil
+	default:
+	}
+
+	if m.guard.isLoop(time.Now()) {
+		log.Error("restart loop detected; aborting",
+			slog.Int("crashes", m.o.GuardSize), slog.Duration("window", m.o.GuardWindow))
+
+		return true, fmt.Errorf("restart loop detected: worker crashed %d times within %s — aborting",
+			m.o.GuardSize, m.o.GuardWindow)
+	}
+
+	d := m.guard.backoff(*attempt)
+	log.Warn("worker crashed; restarting",
+		slog.Int("code", code.AsInt()), slog.Int("attempt", *attempt+1), slog.Duration("backoff", d))
+	m.sleep(d)
+
+	*attempt++
+
+	return false, nil
 }
 
 // realSpawn executes the worker as a child of this process, inheriting stdio.
@@ -121,14 +157,18 @@ func realSpawn(ctx context.Context, args []string) int {
 	if err != nil {
 		return ExitError.AsInt()
 	}
+
 	cmd := exec.CommandContext(ctx, exe, args...)
+
 	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
 	if err := cmd.Run(); err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
 			return ee.ExitCode()
 		}
+
 		return ExitError.AsInt()
 	}
+
 	return ExitSuccess.AsInt()
 }

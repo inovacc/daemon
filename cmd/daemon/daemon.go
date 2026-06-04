@@ -31,6 +31,7 @@ func serve(ctx context.Context, p daemon.Ports) error {
 	slog.Info("serving", slog.Int("http_port", p.HTTP), slog.Int("grpc_port", p.GRPC))
 	<-ctx.Done()
 	slog.Info("stopped serving")
+
 	return nil
 }
 

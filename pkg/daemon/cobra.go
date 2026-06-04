@@ -23,6 +23,7 @@ func AttachCommands(root *cobra.Command, opts Options) error {
 	if opts.Serve == nil {
 		return errors.New("daemon: Options.Serve is required")
 	}
+
 	o := opts.withDefaults()
 
 	service := &cobra.Command{
@@ -39,12 +40,14 @@ func AttachCommands(root *cobra.Command, opts Options) error {
 	}
 
 	var httpPort, grpcPort int
+
 	worker := &cobra.Command{
 		Use:    o.WorkerCmd,
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			wo := o
 			wo.HTTPPort, wo.GRPCPort = httpPort, grpcPort
+
 			return RunWorker(cmd.Context(), wo)
 		},
 	}
@@ -52,6 +55,7 @@ func AttachCommands(root *cobra.Command, opts Options) error {
 	worker.Flags().IntVar(&grpcPort, "grpc-port", o.GRPCPort, "gRPC port")
 
 	root.AddCommand(service, monitor, worker, svcCommand(o))
+
 	return nil
 }
 
@@ -59,15 +63,19 @@ func AttachCommands(root *cobra.Command, opts Options) error {
 func RunWorker(ctx context.Context, opts Options) error {
 	o := opts.withDefaults()
 	log := o.logger().With(slog.String("role", "worker"))
+
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
 	log.Info("worker serving", slog.Int("http_port", o.HTTPPort), slog.Int("grpc_port", o.GRPCPort))
+
 	err := o.Serve(ctx, Ports{HTTP: o.HTTPPort, GRPC: o.GRPCPort})
 	if err != nil {
 		log.Error("worker exited with error", slog.Any("err", err))
 	} else {
 		log.Info("worker exited")
 	}
+
 	return err
 }
 
@@ -78,13 +86,16 @@ func startCommand(o Options) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			pid, err := Start(o)
 			if errors.Is(err, ErrAlreadyRunning) {
-				fmt.Fprintf(cmd.OutOrStdout(), "already running: pid=%d\n", pid)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "already running: pid=%d\n", pid)
 				return nil
 			}
+
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "started: pid=%d\n", pid)
+
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "started: pid=%d\n", pid)
+
 			return nil
 		},
 	}
@@ -98,7 +109,9 @@ func stopCommand(o Options) *cobra.Command {
 			if err := Stop(o); err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "stopped")
+
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "stopped")
+
 			return nil
 		},
 	}
@@ -111,11 +124,13 @@ func statusCommand(o Options) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			info := serverinfo.NewStore(o.DataDir).IsRunning()
 			if info == nil {
-				fmt.Fprintln(cmd.OutOrStdout(), "not running")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "not running")
 				return nil
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "running: pid=%d addr=%s since=%s\n",
+
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "running: pid=%d addr=%s since=%s\n",
 				info.PID, info.Address, info.StartedAt.Format(time.RFC3339))
+
 			return nil
 		},
 	}

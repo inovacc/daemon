@@ -22,6 +22,7 @@ func reexecSelf(args []string) error {
 	if err != nil {
 		return fmt.Errorf("locate executable: %w", err)
 	}
+
 	cmd := exec.Command(self, args...)
 	cmd.Env = os.Environ()
 	// DETACHED_PROCESS + CREATE_NO_WINDOW drop stdio, so nil-ing it is unnecessary (matches spawn_windows.go).
@@ -32,7 +33,10 @@ func reexecSelf(args []string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("spawn upgraded monitor: %w", err)
 	}
+
 	_ = cmd.Process.Release()
+
 	os.Exit(0)
+
 	return nil // unreachable; os.Exit does not return, but the compiler requires it.
 }

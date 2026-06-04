@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 )
@@ -31,7 +32,6 @@ var (
 
 	// GOARCH is the target architecture
 	GOARCH = "unknown"
-
 )
 
 // VersionInfo contains all version metadata.
@@ -44,7 +44,6 @@ type VersionInfo struct {
 	GoVersion string `json:"go_version"`
 	GoOS      string `json:"goos"`
 	GoArch    string `json:"goarch"`
-
 }
 
 // versionCmd represents the version command.
@@ -66,11 +65,12 @@ func init() {
 	versionCmd.Flags().BoolVarP(&jsonOutput, "json", "j", false, "Output version info as JSON")
 }
 
-func runVersion(cmd *cobra.Command, args []string) {
+func runVersion(cmd *cobra.Command, _ []string) {
+	out := cmd.OutOrStdout()
 	if jsonOutput {
-		fmt.Println(GetVersionJSON())
+		_, _ = fmt.Fprintln(out, GetVersionJSON())
 	} else {
-		printVersion()
+		printVersion(out)
 	}
 }
 
@@ -85,7 +85,6 @@ func GetVersionInfo() *VersionInfo {
 		GoVersion: GoVersion,
 		GoOS:      GOOS,
 		GoArch:    GOARCH,
-
 	}
 }
 
@@ -99,13 +98,12 @@ func GetVersionJSON() string {
 	return string(data)
 }
 
-func printVersion() {
-	fmt.Printf("Version:    %s\n", Version)
-	fmt.Printf("Git Hash:   %s\n", GitHash)
-	fmt.Printf("Build Time: %s\n", BuildTime)
+func printVersion(out io.Writer) {
+	_, _ = fmt.Fprintf(out, "Version:    %s\n", Version)
+	_, _ = fmt.Fprintf(out, "Git Hash:   %s\n", GitHash)
+	_, _ = fmt.Fprintf(out, "Build Time: %s\n", BuildTime)
 
-	fmt.Printf("Build Hash: %s\n", BuildHash)
-	fmt.Printf("Go Version: %s\n", GoVersion)
-	fmt.Printf("OS/Arch:    %s/%s\n", GOOS, GOARCH)
-
+	_, _ = fmt.Fprintf(out, "Build Hash: %s\n", BuildHash)
+	_, _ = fmt.Fprintf(out, "Go Version: %s\n", GoVersion)
+	_, _ = fmt.Fprintf(out, "OS/Arch:    %s/%s\n", GOOS, GOARCH)
 }

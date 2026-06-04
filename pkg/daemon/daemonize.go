@@ -30,8 +30,10 @@ func childEnvName(binaryName string) string {
 		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
 			return r
 		}
+
 		return '_'
 	}, up)
+
 	return up + "_DAEMON_CHILD"
 }
 
@@ -40,19 +42,24 @@ func childEnvName(binaryName string) string {
 // and refuses to daemonize from within a daemon child (guarded by the env var).
 func Start(o Options) (int, error) {
 	o = o.withDefaults()
+
 	guard := childEnvName(o.BinaryName)
 	if os.Getenv(guard) != "" {
 		return 0, errors.New("daemon: refusing to daemonize from within a daemon child")
 	}
+
 	store := serverinfo.NewStore(o.DataDir)
 	if info := store.IsRunning(); info != nil {
 		return info.PID, ErrAlreadyRunning
 	}
+
 	exe, err := os.Executable()
 	if err != nil {
 		return 0, err
 	}
+
 	env := append(os.Environ(), guard+"=1")
+
 	pid, err := spawnDetachedFn(exe, o.buildMonitorArgs(), env)
 	if err != nil {
 		return 0, fmt.Errorf("daemon: spawn: %w", err)
@@ -63,8 +70,10 @@ func Start(o Options) (int, error) {
 		if store.IsRunning() != nil {
 			return pid, nil
 		}
+
 		time.Sleep(50 * time.Millisecond)
 	}
+
 	return pid, nil // spawned; serverinfo not yet observed — caller may re-check via status
 }
 
@@ -72,13 +81,17 @@ func Start(o Options) (int, error) {
 func Stop(o Options) error {
 	o = o.withDefaults()
 	store := serverinfo.NewStore(o.DataDir)
+
 	info := store.IsRunning()
 	if info == nil {
 		return ErrNotRunning
 	}
+
 	if err := stopProcessFn(info.PID); err != nil {
 		return fmt.Errorf("daemon: stop pid %d: %w", info.PID, err)
 	}
+
 	_ = store.Remove()
+
 	return nil
 }

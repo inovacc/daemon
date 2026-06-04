@@ -11,12 +11,14 @@ func TestIsElevatedFnDefaultsToIsElevated(t *testing.T) {
 
 func TestIsElevatedFnIsOverridable(t *testing.T) {
 	orig := isElevatedFn
+
 	t.Cleanup(func() { isElevatedFn = orig })
 
 	isElevatedFn = func() bool { return true }
 	if !isElevatedFn() {
 		t.Fatal("override to true failed")
 	}
+
 	isElevatedFn = func() bool { return false }
 	if isElevatedFn() {
 		t.Fatal("override to false failed")

@@ -34,8 +34,10 @@ func ExitCodeFor(err error) int {
 	if err == nil {
 		return ExitSuccess.AsInt()
 	}
+
 	if errors.Is(err, ErrNeedsPrivilege) {
 		return ExitNeedsPrivilege.AsInt()
 	}
+
 	return ExitError.AsInt()
 }

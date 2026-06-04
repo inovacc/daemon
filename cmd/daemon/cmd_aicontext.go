@@ -85,6 +85,7 @@ func printAIContextMarkdown(cmd *cobra.Command) error {
 
 	// Global flags
 	var globalFlags []FlagDetail
+
 	rootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
 		if f.Name == "help" {
 			return
@@ -104,16 +105,16 @@ func printAIContextMarkdown(cmd *cobra.Command) error {
 		b.WriteString("These flags apply to all commands:\n\n")
 
 		for _, f := range globalFlags {
-			b.WriteString(fmt.Sprintf("- `--%s`", f.Name))
+			fmt.Fprintf(&b, "- `--%s`", f.Name)
 
 			if f.Shorthand != "" {
-				b.WriteString(fmt.Sprintf(", `-%s`", f.Shorthand))
+				fmt.Fprintf(&b, ", `-%s`", f.Shorthand)
 			}
 
-			b.WriteString(fmt.Sprintf(" - %s", f.Description))
+			fmt.Fprintf(&b, " - %s", f.Description)
 
 			if f.Default != "" && f.Default != "false" {
-				b.WriteString(fmt.Sprintf(" (default: %s)", f.Default))
+				fmt.Fprintf(&b, " (default: %s)", f.Default)
 			}
 
 			b.WriteString("\n")
@@ -134,11 +135,13 @@ func printAIContextMarkdown(cmd *cobra.Command) error {
 	}
 
 	b.WriteString("## Command Categories\n\n")
+
 	for cat, cmds := range categories {
 		_, _ = fmt.Fprintf(&b, "### %s\n\n", cat)
 		for _, name := range cmds {
 			_, _ = fmt.Fprintf(&b, "- `%s`\n", name)
 		}
+
 		b.WriteString("\n")
 	}
 
@@ -146,6 +149,7 @@ func printAIContextMarkdown(cmd *cobra.Command) error {
 	// TODO: customize for your app
 	b.WriteString("## Project Structure\n\n")
 	b.WriteString("```\n")
+
 	structure := []string{
 		"cmd/daemon/  # CLI entry point and commands",
 		"internal/          # Private application code",
@@ -154,6 +158,7 @@ func printAIContextMarkdown(cmd *cobra.Command) error {
 	for _, s := range structure {
 		_, _ = fmt.Fprintf(&b, "%s\n", s)
 	}
+
 	b.WriteString("```\n")
 
 	_, _ = fmt.Fprint(cmd.OutOrStdout(), b.String())
@@ -168,6 +173,7 @@ func printAIContextCompact(cmd *cobra.Command) error {
 
 	// Global flags
 	var globalParts []string
+
 	rootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
 		if f.Name == "help" {
 			return

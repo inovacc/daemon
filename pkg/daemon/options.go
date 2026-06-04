@@ -66,6 +66,7 @@ func (o Options) logger() *slog.Logger {
 	if o.Logger != nil {
 		return o.Logger
 	}
+
 	return slog.Default()
 }
 
@@ -74,30 +75,39 @@ func (o Options) withDefaults() Options {
 	if o.HTTPPort == 0 {
 		o.HTTPPort = DefaultHTTPPort
 	}
+
 	if o.GRPCPort == 0 {
 		o.GRPCPort = DefaultGRPCPort
 	}
+
 	if o.GuardSize == 0 {
 		o.GuardSize = defaultGuardSize
 	}
+
 	if o.GuardWindow == 0 {
 		o.GuardWindow = defaultGuardWindow
 	}
+
 	if o.MonitorCmd == "" {
 		o.MonitorCmd = "__monitor"
 	}
+
 	if o.WorkerCmd == "" {
 		o.WorkerCmd = "__worker"
 	}
+
 	if o.ServiceName == "" {
 		o.ServiceName = o.BinaryName
 	}
+
 	if o.DataDir == "" {
 		cache, err := os.UserCacheDir()
 		if err != nil || cache == "" {
 			cache = os.TempDir()
 		}
+
 		o.DataDir = filepath.Join(cache, o.BinaryName)
 	}
+
 	return o
 }

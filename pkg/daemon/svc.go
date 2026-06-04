@@ -54,13 +54,17 @@ func (p *program) Start(service.Service) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancel = cancel
 	p.done = make(chan struct{})
+
 	go func() {
 		defer close(p.done)
+
 		if err := p.run(ctx, p.o); err != nil {
 			log.Error("supervisor exited with error", slog.Any("err", err))
 		}
 	}()
+
 	log.Info("os service started")
+
 	return nil
 }
 
@@ -71,15 +75,18 @@ func (p *program) Stop(service.Service) error {
 	if p.cancel != nil {
 		p.cancel()
 	}
+
 	if p.done == nil {
 		return nil
 	}
+
 	select {
 	case <-p.done:
 		log.Info("os service stopped")
 	case <-time.After(p.stopTimeout):
 		log.Warn("os service stop timed out; forcing exit", slog.Duration("timeout", p.stopTimeout))
 	}
+
 	return nil
 }
 
@@ -90,16 +97,19 @@ func realOSService(o Options) (osService, error) {
 	if o.ServiceName == "" {
 		return nil, fmt.Errorf("daemon: cannot manage OS service: ServiceName is empty (set Options.BinaryName or Options.ServiceName)")
 	}
+
 	cfg := &service.Config{
 		Name:        o.ServiceName,
 		DisplayName: o.ServiceName,
 		Description: fmt.Sprintf("%s service", o.BinaryName),
 		Arguments:   []string{"svc", "run"},
 	}
+
 	s, err := service.New(newProgram(o), cfg)
 	if err != nil {
 		return nil, fmt.Errorf("daemon: build OS service: %w", err)
 	}
+
 	return s, nil
 }
 
@@ -121,6 +131,7 @@ func svcCommand(o Options) *cobra.Command {
 		svcStatusCommand(o),
 		svcRunCommand(o),
 	)
+
 	return svc
 }
 
@@ -132,14 +143,18 @@ func svcInstallCommand(o Options) *cobra.Command {
 			if err := RequirePrivilege(cmd); err != nil {
 				return err
 			}
+
 			s, err := newOSService(o)
 			if err != nil {
 				return err
 			}
+
 			if err := s.Install(); err != nil {
 				return fmt.Errorf("svc install: %w", err)
 			}
+
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "installed")
+
 			return nil
 		},
 	}
@@ -153,14 +168,18 @@ func svcUninstallCommand(o Options) *cobra.Command {
 			if err := RequirePrivilege(cmd); err != nil {
 				return err
 			}
+
 			s, err := newOSService(o)
 			if err != nil {
 				return err
 			}
+
 			if err := s.Uninstall(); err != nil {
 				return fmt.Errorf("svc uninstall: %w", err)
 			}
+
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "uninstalled")
+
 			return nil
 		},
 	}
@@ -174,14 +193,18 @@ func svcStartCommand(o Options) *cobra.Command {
 			if err := RequirePrivilege(cmd); err != nil {
 				return err
 			}
+
 			s, err := newOSService(o)
 			if err != nil {
 				return err
 			}
+
 			if err := s.Start(); err != nil {
 				return fmt.Errorf("svc start: %w", err)
 			}
+
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "started")
+
 			return nil
 		},
 	}
@@ -195,14 +218,18 @@ func svcStopCommand(o Options) *cobra.Command {
 			if err := RequirePrivilege(cmd); err != nil {
 				return err
 			}
+
 			s, err := newOSService(o)
 			if err != nil {
 				return err
 			}
+
 			if err := s.Stop(); err != nil {
 				return fmt.Errorf("svc stop: %w", err)
 			}
+
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "stopped")
+
 			return nil
 		},
 	}
@@ -216,14 +243,18 @@ func svcRestartCommand(o Options) *cobra.Command {
 			if err := RequirePrivilege(cmd); err != nil {
 				return err
 			}
+
 			s, err := newOSService(o)
 			if err != nil {
 				return err
 			}
+
 			if err := s.Restart(); err != nil {
 				return fmt.Errorf("svc restart: %w", err)
 			}
+
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "restarted")
+
 			return nil
 		},
 	}
@@ -238,6 +269,7 @@ func svcStatusCommand(o Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			st, err := s.Status()
 			if err != nil {
 				// A Status() error means the service is not registered with the
@@ -246,6 +278,7 @@ func svcStatusCommand(o Options) *cobra.Command {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "not installed")
 				return nil //nolint:nilerr // status query: "not installed" is a clean result, not an error
 			}
+
 			switch st {
 			case service.StatusRunning:
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "running")
@@ -256,6 +289,7 @@ func svcStatusCommand(o Options) *cobra.Command {
 			default:
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "unknown")
 			}
+
 			return nil
 		},
 	}
@@ -271,6 +305,7 @@ func svcRunCommand(o Options) *cobra.Command {
 			if err != nil {
 				return err
 			}
+
 			return s.Run()
 		},
 	}

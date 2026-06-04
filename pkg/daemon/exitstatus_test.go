@@ -10,6 +10,7 @@ func TestExitNeedsPrivilegeValue(t *testing.T) {
 	if ExitNeedsPrivilege != 5 {
 		t.Fatalf("ExitNeedsPrivilege = %d, want 5", ExitNeedsPrivilege)
 	}
+
 	if ExitNeedsPrivilege.AsInt() != 5 {
 		t.Fatalf("AsInt() = %d, want 5", ExitNeedsPrivilege.AsInt())
 	}
@@ -21,6 +22,7 @@ func TestExitCodesAreDistinct(t *testing.T) {
 		if prev, ok := seen[e.AsInt()]; ok {
 			t.Fatalf("exit code %d reused by %d and %d", e.AsInt(), prev, e)
 		}
+
 		seen[e.AsInt()] = e
 	}
 }

@@ -24,5 +24,6 @@ func (o Options) buildMonitorArgs() []string {
 	if o.portsExplicit {
 		args = append(args, "--port", strconv.Itoa(o.HTTPPort), "--grpc-port", strconv.Itoa(o.GRPCPort))
 	}
+
 	return args
 }

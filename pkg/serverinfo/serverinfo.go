@@ -45,13 +45,16 @@ func (s *Store) Write(info Info) error {
 	if info.StartedAt.IsZero() {
 		info.StartedAt = time.Now()
 	}
+
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return err
 	}
+
 	data, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
 		return err
 	}
+
 	return os.WriteFile(s.Path(), data, 0o644)
 }
 
@@ -60,14 +63,20 @@ func (s *Store) Read() (*Info, error) {
 	data, err := os.ReadFile(s.Path())
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
+			// (nil, nil) is the documented, tested "no record" signal for callers
+			// (e.g. IsRunning); a missing PID file is an expected, non-error state.
+			//nolint:nilnil // intentional: absence is not an error in this API contract
 			return nil, nil
 		}
+
 		return nil, err
 	}
+
 	var info Info
 	if err := json.Unmarshal(data, &info); err != nil {
 		return nil, err
 	}
+
 	return &info, nil
 }
 
@@ -76,6 +85,7 @@ func (s *Store) Remove() error {
 	if err := os.Remove(s.Path()); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+
 	return nil
 }
 
@@ -86,9 +96,11 @@ func (s *Store) IsRunning() *Info {
 	if err != nil || info == nil {
 		return nil
 	}
+
 	if !s.alive(info.PID) {
 		_ = s.Remove()
 		return nil
 	}
+
 	return info
 }

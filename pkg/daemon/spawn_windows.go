@@ -14,6 +14,7 @@ import (
 func spawnDetached(exe string, args, env []string) (int, error) {
 	cmd := exec.Command(exe, args...)
 	cmd.Env = env
+
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: windows.DETACHED_PROCESS | windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_NO_WINDOW,
 		HideWindow:    true,
@@ -21,7 +22,9 @@ func spawnDetached(exe string, args, env []string) (int, error) {
 	if err := cmd.Start(); err != nil {
 		return 0, err
 	}
+
 	pid := cmd.Process.Pid
 	_ = cmd.Process.Release()
+
 	return pid, nil
 }

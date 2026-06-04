@@ -19,6 +19,7 @@ func captureLogger() (*slog.Logger, *bytes.Buffer) {
 func TestMonitorLogsLifecycle(t *testing.T) {
 	lg, buf := captureLogger()
 	calls := 0
+
 	m := &monitor{
 		o:     Options{BinaryName: "t", Logger: lg, GRPCPort: 9501}.withDefaults(),
 		guard: newRestartGuard(4, 60*time.Second),
@@ -28,6 +29,7 @@ func TestMonitorLogsLifecycle(t *testing.T) {
 			if calls == 1 {
 				return ExitError.AsInt() // crash once...
 			}
+
 			return ExitSuccess.AsInt() // ...then clean exit
 		},
 		sleep: func(time.Duration) {},
@@ -35,12 +37,14 @@ func TestMonitorLogsLifecycle(t *testing.T) {
 	if err := m.run(context.Background()); err != nil {
 		t.Fatalf("run: %v", err)
 	}
+
 	out := buf.String()
 	for _, want := range []string{"monitor started", "worker crashed; restarting", "worker exited cleanly", "monitor stopped"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing lifecycle event %q in:\n%s", want, out)
 		}
 	}
+
 	if !strings.Contains(out, `"role":"monitor"`) {
 		t.Error("missing role=monitor attribute")
 	}
@@ -48,6 +52,7 @@ func TestMonitorLogsLifecycle(t *testing.T) {
 
 func TestMonitorLoopAbortLogged(t *testing.T) {
 	lg, buf := captureLogger()
+
 	m := &monitor{
 		o:     Options{BinaryName: "t", Logger: lg}.withDefaults(),
 		guard: newRestartGuard(2, time.Hour),
@@ -58,6 +63,7 @@ func TestMonitorLoopAbortLogged(t *testing.T) {
 	if err := m.run(context.Background()); err == nil {
 		t.Fatal("expected loop-abort error")
 	}
+
 	if !strings.Contains(buf.String(), "restart loop detected") {
 		t.Errorf("loop-abort not logged:\n%s", buf.String())
 	}

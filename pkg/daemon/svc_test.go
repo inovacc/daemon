@@ -22,6 +22,7 @@ func TestProgramStartIsNonBlockingAndStopCancels(t *testing.T) {
 		close(started)
 		<-ctx.Done() // unblocks only when Stop cancels
 		close(releasedCtx)
+
 		return ctx.Err()
 	}
 
@@ -29,6 +30,7 @@ func TestProgramStartIsNonBlockingAndStopCancels(t *testing.T) {
 	if err := p.Start(nil); err != nil {
 		t.Fatalf("Start returned error: %v", err)
 	}
+
 	select {
 	case <-started:
 	case <-time.After(2 * time.Second):
@@ -37,7 +39,9 @@ func TestProgramStartIsNonBlockingAndStopCancels(t *testing.T) {
 
 	// Stop must cancel the context and return well within the budget.
 	stopReturned := make(chan error, 1)
+
 	go func() { stopReturned <- p.Stop(nil) }()
+
 	select {
 	case err := <-stopReturned:
 		if err != nil {
@@ -46,6 +50,7 @@ func TestProgramStartIsNonBlockingAndStopCancels(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("Stop did not return within budget")
 	}
+
 	select {
 	case <-releasedCtx:
 	case <-time.After(time.Second):
@@ -65,7 +70,9 @@ func TestProgramStopWaitsThenGivesUp(t *testing.T) {
 	_ = p.Start(nil)
 
 	done := make(chan error, 1)
+
 	go func() { done <- p.Stop(nil) }()
+
 	select {
 	case err := <-done:
 		if err != nil {
@@ -97,19 +104,24 @@ func (f *fakeOSService) Status() (service.Status, error) {
 // findSub locates a direct subcommand by name.
 func findSub(t *testing.T, parent *cobra.Command, name string) *cobra.Command {
 	t.Helper()
+
 	for _, c := range parent.Commands() {
 		if c.Name() == name {
 			return c
 		}
 	}
+
 	t.Fatalf("subcommand %q not found under %q", name, parent.Name())
+
 	return nil
 }
 
 func withFakeOSService(t *testing.T, fake *fakeOSService) {
 	t.Helper()
+
 	prev := newOSService
 	newOSService = func(Options) (osService, error) { return fake, nil }
+
 	t.Cleanup(func() { newOSService = prev })
 }
 
@@ -118,8 +130,10 @@ func withFakeOSService(t *testing.T, fake *fakeOSService) {
 // osService seam on this non-elevated host.
 func withElevated(t *testing.T) {
 	t.Helper()
+
 	prev := isElevatedFn
 	isElevatedFn = func() bool { return true }
+
 	t.Cleanup(func() { isElevatedFn = prev })
 }
 
@@ -142,12 +156,15 @@ func TestSvcVerbsDispatchToOSService(t *testing.T) {
 			grp := svcCommand(Options{BinaryName: "t"}.withDefaults())
 			sub := findSub(t, grp, tc.verb)
 			sub.SetContext(context.Background())
+
 			var out bytes.Buffer
 			sub.SetOut(&out)
 			sub.SetErr(&out)
+
 			if err := sub.RunE(sub, nil); err != nil {
 				t.Fatalf("verb %q RunE: %v", tc.verb, err)
 			}
+
 			if len(fake.calls) != 1 || fake.calls[0] != tc.want {
 				t.Fatalf("verb %q called %v, want [%s]", tc.verb, fake.calls, tc.want)
 			}
@@ -157,6 +174,7 @@ func TestSvcVerbsDispatchToOSService(t *testing.T) {
 
 func TestSvcRunIsHidden(t *testing.T) {
 	grp := svcCommand(Options{BinaryName: "t"}.withDefaults())
+
 	run := findSub(t, grp, "run")
 	if !run.Hidden {
 		t.Fatal("svc run must be Hidden")
@@ -172,9 +190,11 @@ func TestSvcVerbPropagatesError(t *testing.T) {
 	grp := svcCommand(Options{BinaryName: "t"}.withDefaults())
 	install := findSub(t, grp, "install")
 	install.SetContext(context.Background())
+
 	var out bytes.Buffer
 	install.SetOut(&out)
 	install.SetErr(&out)
+
 	if err := install.RunE(install, nil); !errors.Is(err, sentinel) {
 		t.Fatalf("install RunE error = %v, want wraps %v", err, sentinel)
 	}
@@ -188,9 +208,11 @@ func TestRealOSServiceEmptyServiceName(t *testing.T) {
 	if err == nil {
 		t.Fatal("realOSService(Options{}) must return an error for empty ServiceName")
 	}
+
 	if s != nil {
 		t.Fatalf("realOSService must return a nil osService on error, got %v", s)
 	}
+
 	if !strings.Contains(err.Error(), "ServiceName is empty") {
 		t.Fatalf("error %q must mention that ServiceName is empty", err.Error())
 	}
