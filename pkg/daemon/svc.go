@@ -129,6 +129,9 @@ func svcInstallCommand(o Options) *cobra.Command {
 		Use:   "install",
 		Short: "Register the service with the OS init system (privileged)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := RequirePrivilege(cmd); err != nil {
+				return err
+			}
 			s, err := newOSService(o)
 			if err != nil {
 				return err
@@ -147,6 +150,9 @@ func svcUninstallCommand(o Options) *cobra.Command {
 		Use:   "uninstall",
 		Short: "Remove the service from the OS init system (privileged)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := RequirePrivilege(cmd); err != nil {
+				return err
+			}
 			s, err := newOSService(o)
 			if err != nil {
 				return err
@@ -165,6 +171,9 @@ func svcStartCommand(o Options) *cobra.Command {
 		Use:   "start",
 		Short: "Ask the OS init system to start the service (privileged)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := RequirePrivilege(cmd); err != nil {
+				return err
+			}
 			s, err := newOSService(o)
 			if err != nil {
 				return err
@@ -183,6 +192,9 @@ func svcStopCommand(o Options) *cobra.Command {
 		Use:   "stop",
 		Short: "Ask the OS init system to stop the service (privileged)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := RequirePrivilege(cmd); err != nil {
+				return err
+			}
 			s, err := newOSService(o)
 			if err != nil {
 				return err
@@ -201,6 +213,9 @@ func svcRestartCommand(o Options) *cobra.Command {
 		Use:   "restart",
 		Short: "Ask the OS init system to restart the service (privileged)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := RequirePrivilege(cmd); err != nil {
+				return err
+			}
 			s, err := newOSService(o)
 			if err != nil {
 				return err

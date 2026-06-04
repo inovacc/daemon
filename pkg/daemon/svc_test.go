@@ -113,6 +113,16 @@ func withFakeOSService(t *testing.T, fake *fakeOSService) {
 	t.Cleanup(func() { newOSService = prev })
 }
 
+// withElevated forces the privilege seam to report elevated for the duration of the
+// test, so RunEs of the mutating svc verbs (now gated by RequirePrivilege) reach the
+// osService seam on this non-elevated host.
+func withElevated(t *testing.T) {
+	t.Helper()
+	prev := isElevatedFn
+	isElevatedFn = func() bool { return true }
+	t.Cleanup(func() { isElevatedFn = prev })
+}
+
 func TestSvcVerbsDispatchToOSService(t *testing.T) {
 	cases := []struct{ verb, want string }{
 		{"install", "install"},
@@ -127,6 +137,7 @@ func TestSvcVerbsDispatchToOSService(t *testing.T) {
 		t.Run(tc.verb, func(t *testing.T) {
 			fake := &fakeOSService{status: service.StatusRunning}
 			withFakeOSService(t, fake)
+			withElevated(t)
 
 			grp := svcCommand(Options{BinaryName: "t"}.withDefaults())
 			sub := findSub(t, grp, tc.verb)
@@ -156,6 +167,7 @@ func TestSvcVerbPropagatesError(t *testing.T) {
 	sentinel := errors.New("boom")
 	fake := &fakeOSService{err: sentinel}
 	withFakeOSService(t, fake)
+	withElevated(t)
 
 	grp := svcCommand(Options{BinaryName: "t"}.withDefaults())
 	install := findSub(t, grp, "install")
