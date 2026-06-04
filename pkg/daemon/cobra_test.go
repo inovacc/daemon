@@ -62,3 +62,44 @@ func TestRunWorkerInvokesServeWithPorts(t *testing.T) {
 		t.Fatalf("Serve got wrong ports: %+v", gotPorts)
 	}
 }
+
+func TestAttachRegistersSvcGroup(t *testing.T) {
+	root := &cobra.Command{Use: "root"}
+	if err := AttachCommands(root, Options{
+		BinaryName: "t",
+		Serve:      func(context.Context, Ports) error { return nil },
+	}); err != nil {
+		t.Fatalf("AttachCommands: %v", err)
+	}
+
+	var svc *cobra.Command
+	for _, c := range root.Commands() {
+		if c.Name() == "svc" {
+			svc = c
+		}
+	}
+	if svc == nil {
+		t.Fatal("svc group not registered by AttachCommands")
+	}
+	if svc.Hidden {
+		t.Fatal("svc group must be visible")
+	}
+
+	want := map[string]bool{ // name -> hidden
+		"install": false, "uninstall": false, "start": false,
+		"stop": false, "restart": false, "status": false, "run": true,
+	}
+	got := map[string]bool{}
+	for _, c := range svc.Commands() {
+		got[c.Name()] = c.Hidden
+	}
+	for name, hidden := range want {
+		h, ok := got[name]
+		if !ok {
+			t.Fatalf("svc subcommand %q not registered", name)
+		}
+		if h != hidden {
+			t.Fatalf("svc %q hidden=%v, want %v", name, h, hidden)
+		}
+	}
+}

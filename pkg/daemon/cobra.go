@@ -51,7 +51,7 @@ func AttachCommands(root *cobra.Command, opts Options) error {
 	worker.Flags().IntVar(&httpPort, "port", o.HTTPPort, "HTTP port")
 	worker.Flags().IntVar(&grpcPort, "grpc-port", o.GRPCPort, "gRPC port")
 
-	root.AddCommand(service, monitor, worker)
+	root.AddCommand(service, monitor, worker, svcCommand(o))
 	return nil
 }
 
