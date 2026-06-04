@@ -30,7 +30,7 @@ func AttachCommands(root *cobra.Command, opts Options) error {
 		Short: fmt.Sprintf("Run the %s service (monitor supervises the worker)", o.BinaryName),
 		RunE:  func(cmd *cobra.Command, _ []string) error { return RunMonitor(cmd.Context(), o) },
 	}
-	service.AddCommand(statusCommand(o))
+	service.AddCommand(statusCommand(o), startCommand(o), stopCommand(o))
 
 	monitor := &cobra.Command{
 		Use:    o.MonitorCmd,
@@ -69,6 +69,39 @@ func RunWorker(ctx context.Context, opts Options) error {
 		log.Info("worker exited")
 	}
 	return err
+}
+
+func startCommand(o Options) *cobra.Command {
+	return &cobra.Command{
+		Use:   "start",
+		Short: "Start the daemon in the background",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			pid, err := Start(o)
+			if errors.Is(err, ErrAlreadyRunning) {
+				fmt.Fprintf(cmd.OutOrStdout(), "already running: pid=%d\n", pid)
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "started: pid=%d\n", pid)
+			return nil
+		},
+	}
+}
+
+func stopCommand(o Options) *cobra.Command {
+	return &cobra.Command{
+		Use:   "stop",
+		Short: "Stop the background daemon",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := Stop(o); err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "stopped")
+			return nil
+		},
+	}
 }
 
 func statusCommand(o Options) *cobra.Command {
