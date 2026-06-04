@@ -82,8 +82,17 @@ func (m *monitor) run(ctx context.Context) error {
 			attempt = 0
 			continue
 		case ExitUpgrade:
-			// Re-exec lands in C3; for now this restarts the worker.
 			log.Info("worker requested binary upgrade", slog.Int("code", code.AsInt()))
+			log.Info("re-executing for binary upgrade")
+			// Reuse the process's ORIGINAL invocation args so the re-execed image keeps
+			// its role: a __monitor process re-execs as __monitor, a future "svc run"
+			// OS-service re-execs as "svc run". Do NOT use buildMonitorArgs() here.
+			if err := reexecFn(os.Args[1:]); err != nil {
+				// On Unix syscall.Exec replaces this image and never returns; on
+				// Windows reexecSelf exits the process. Reaching here means re-exec
+				// FAILED — degrade to the existing restart so we never kill the service.
+				log.Error("re-exec failed; falling back to restart", slog.Any("err", err))
+			}
 			attempt = 0
 			continue
 		default: // ExitError / any crash
