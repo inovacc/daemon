@@ -1,5 +1,5 @@
 # Binaries
-daemon
+/daemon
 *.exe
 *.exe~
 *.dll
