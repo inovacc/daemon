@@ -17,6 +17,11 @@ import (
 // FileName is the fixed name of the PID file inside the store directory.
 const FileName = "server.json"
 
+// ErrNoRecord reports that no PID file exists yet. It is an expected,
+// non-fatal signal (the daemon is simply not recorded as running) and is
+// returned by Read when the underlying file is absent.
+var ErrNoRecord = errors.New("serverinfo: no record")
+
 // Info is the persisted record of a running daemon instance.
 type Info struct {
 	Address   string    `json:"address,omitempty"`
@@ -58,15 +63,16 @@ func (s *Store) Write(info Info) error {
 	return os.WriteFile(s.Path(), data, 0o644)
 }
 
-// Read returns the persisted info, or (nil, nil) when the file does not exist.
+// Read returns the persisted info, or ErrNoRecord when the file does not exist.
+// Callers should treat ErrNoRecord (via errors.Is) as an expected "not running"
+// state rather than a failure.
 func (s *Store) Read() (*Info, error) {
 	data, err := os.ReadFile(s.Path())
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			// (nil, nil) is the documented, tested "no record" signal for callers
-			// (e.g. IsRunning); a missing PID file is an expected, non-error state.
-			//nolint:nilnil // intentional: absence is not an error in this API contract
-			return nil, nil
+			// A missing PID file is an expected, non-error state; surface it as a
+			// typed sentinel so callers can distinguish it from real I/O failures.
+			return nil, ErrNoRecord
 		}
 
 		return nil, err

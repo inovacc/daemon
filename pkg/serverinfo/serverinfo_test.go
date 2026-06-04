@@ -1,6 +1,7 @@
 package serverinfo
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -33,12 +34,12 @@ func TestWriteReadRoundTrip(t *testing.T) {
 	}
 }
 
-func TestReadMissingReturnsNilNil(t *testing.T) {
+func TestReadMissingReturnsErrNoRecord(t *testing.T) {
 	s := NewStore(t.TempDir())
 
 	got, err := s.Read()
-	if err != nil {
-		t.Fatalf("Read of missing file should not error, got %v", err)
+	if !errors.Is(err, ErrNoRecord) {
+		t.Fatalf("Read of missing file should report ErrNoRecord, got %v", err)
 	}
 
 	if got != nil {

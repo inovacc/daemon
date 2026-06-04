@@ -270,25 +270,26 @@ func svcStatusCommand(o Options) *cobra.Command {
 				return err
 			}
 
+			// A Status() error means the service is not registered with the
+			// init system; that is a normal, friendly outcome (not a failure to
+			// propagate). Map both the error case and each status to a label,
+			// then print a single result and exit cleanly.
 			st, err := s.Status()
-			if err != nil {
-				// A Status() error means the service is not registered with the
-				// init system; that is a normal, friendly outcome (not a failure
-				// to propagate), so report it and exit cleanly.
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "not installed")
-				return nil //nolint:nilerr // status query: "not installed" is a clean result, not an error
+
+			label := "unknown"
+
+			switch {
+			case err != nil:
+				label = "not installed"
+			case st == service.StatusRunning:
+				label = "running"
+			case st == service.StatusStopped:
+				label = "stopped"
+			case st == service.StatusUnknown:
+				label = "unknown"
 			}
 
-			switch st {
-			case service.StatusRunning:
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "running")
-			case service.StatusStopped:
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "stopped")
-			case service.StatusUnknown:
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "unknown")
-			default:
-				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "unknown")
-			}
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), label)
 
 			return nil
 		},
