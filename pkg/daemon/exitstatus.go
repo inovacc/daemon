@@ -19,3 +19,14 @@ const (
 
 // AsInt returns the exit code as a plain int for os.Exit.
 func (e ExitStatus) AsInt() int { return int(e) }
+
+// ExitCodeFor maps an error returned from command execution to a process exit code.
+// nil -> ExitSuccess (0); any other error -> ExitError (1). C4 extends this with the
+// ErrNeedsPrivilege -> ExitNeedsPrivilege (5) branch (add the new case before the
+// default return below).
+func ExitCodeFor(err error) int {
+	if err == nil {
+		return ExitSuccess.AsInt()
+	}
+	return ExitError.AsInt()
+}
