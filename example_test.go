@@ -40,3 +40,41 @@ func ExampleAttachCommands() {
 	fmt.Println(names)
 	// Output: [autostart service svc]
 }
+
+// ExampleAttachCommands_autostart shows the launch-at-logon (autostart) group that
+// AttachCommands wires onto your root: enable / disable / status. Each takes
+// --method startup|taskscheduler and --elevated for the all-users/SYSTEM
+// registration (Windows). On non-Windows platforms the verbs are no-ops.
+func ExampleAttachCommands_autostart() {
+	root := &cobra.Command{Use: "myapp"}
+
+	err := daemon.AttachCommands(root, daemon.Options{
+		BinaryName: "myapp",
+		Serve: func(ctx context.Context, _ daemon.Ports) error {
+			<-ctx.Done()
+			return nil
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	// Locate the autostart group and list the verbs it exposes.
+	var autostart *cobra.Command
+
+	for _, c := range root.Commands() {
+		if c.Name() == "autostart" {
+			autostart = c
+		}
+	}
+
+	names := make([]string, 0, len(autostart.Commands()))
+
+	for _, c := range autostart.Commands() {
+		names = append(names, c.Name())
+	}
+
+	sort.Strings(names)
+	fmt.Println(names)
+	// Output: [disable enable status]
+}

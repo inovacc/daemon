@@ -95,6 +95,7 @@ Legend: `[ ]` unchecked · sev = severity · lev = leverage. See HARDENING-RUNBO
   - blocks: — · unblocks: — · verify: `go build ./...`
   - Move reexecFn into dedicated reexec.go.
   - DONE 2026-07-11: moved `var reexecFn = reexecSelf` (+ its doc comment) out of monitor.go into a new reexec.go, so all four launch/stop seams follow one pattern (shared var in `<name>.go`, impls in `<name>_<os>.go`). Pure relocation, no behavior change; reexec_test still asserts the default. Race + 3-OS build + vet + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
-- [ ] **H-22** · DX-01 · dx · sev Low · lev 2 · `example_test.go:1`
+- [x] **H-22** · DX-01 · dx · sev Low · lev 2 · `example_test.go:1`
   - blocks: — · unblocks: — · verify: `go test -run Example ./...`
   - Optional autostart Example.
+  - DONE 2026-07-11: added runnable ExampleAttachCommands_autostart (godoc-visible) listing the autostart group's verbs (enable/disable/status) with deterministic Output. Example test + race + 3-OS build + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
