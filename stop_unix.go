@@ -2,14 +2,25 @@
 
 package daemon
 
-import "syscall"
+import (
+	"errors"
+	"syscall"
+)
 
 // stopProcess terminates the daemon. The monitor is a session leader (Setsid), so a
 // negative pid signals the whole process group (monitor + worker); on failure it
-// falls back to signalling the single process.
+// falls back to signalling the single process. When BOTH the group and single-pid
+// kills fail, their errors are joined so the caller sees why (EPERM vs ESRCH) instead
+// of only the fallback's error.
 func stopProcess(pid int) error {
-	if err := syscall.Kill(-pid, syscall.SIGTERM); err == nil {
+	groupErr := syscall.Kill(-pid, syscall.SIGTERM)
+	if groupErr == nil {
 		return nil
 	}
-	return syscall.Kill(pid, syscall.SIGTERM)
+
+	if singleErr := syscall.Kill(pid, syscall.SIGTERM); singleErr != nil {
+		return errors.Join(groupErr, singleErr)
+	}
+
+	return nil
 }
