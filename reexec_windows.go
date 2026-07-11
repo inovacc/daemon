@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"syscall"
-
-	"golang.org/x/sys/windows"
 )
 
 // reexecSelf spawns a fresh DETACHED child running the (new) binary image with the
@@ -25,11 +22,8 @@ func reexecSelf(args []string) error {
 
 	cmd := exec.Command(self, args...)
 	cmd.Env = os.Environ()
-	// DETACHED_PROCESS + CREATE_NO_WINDOW drop stdio, so nil-ing it is unnecessary (matches spawn_windows.go).
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: windows.DETACHED_PROCESS | windows.CREATE_NEW_PROCESS_GROUP | windows.CREATE_NO_WINDOW,
-		HideWindow:    true,
-	}
+	// DETACHED_PROCESS + CREATE_NO_WINDOW drop stdio, so nil-ing it is unnecessary.
+	cmd.SysProcAttr = detachedSysProcAttr()
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("spawn upgraded monitor: %w", err)
 	}
