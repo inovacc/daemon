@@ -79,9 +79,10 @@ Legend: `[ ]` unchecked · sev = severity · lev = leverage. See HARDENING-RUNBO
   - blocks: — · unblocks: — · verify: `go test -run Monitor -cover ./...`
   - Direct RunMonitor test with cancelled ctx + fake spawnFn.
   - DONE 2026-07-11: +2 tests — RunMonitor(pre-cancelled ctx) covers the public entry + top-of-loop cancellation + serverinfo write/defer-remove; m.run with a spawn that cancels covers handleCrash's ctx.Done() branch. RunMonitor 0%→100%, handleCrash 100%; root pkg 75.3%→76.3%. (realSpawn stays 0% — thin os/exec leaf.) Race + 3-OS build + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
-- [ ] **H-18** · COV-04 · coverage · sev Low · lev 2 · `svc.go:96`
+- [x] **H-18** · COV-04 · coverage · sev Low · lev 2 · `svc.go:96`
   - blocks: — · unblocks: — · verify: `go test -run Svc -cover ./...`
   - Cover realOSService guard + svcStatusCommand branches.
+  - DONE 2026-07-11: +TestRealOSServiceBuildsService (success path past the empty-name guard) + TestSvcStatusLabels (table over not-installed/running/stopped/unknown — every status→label switch branch). realOSService 42%→85.7%, svcStatusCommand →92.3%; root pkg 76.3%→77.6%. Race + 3-OS build + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
 - [ ] **H-19** · ERR-05 · error-handling · sev Low · lev 2 · `cobra.go:104`
   - blocks: — · unblocks: — · verify: `go test ./... -run TestStop`
   - Make stop idempotent on ErrNotRunning.

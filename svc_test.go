@@ -305,3 +305,56 @@ func TestRealOSServiceEmptyServiceName(t *testing.T) {
 		t.Fatalf("error %q must mention that ServiceName is empty", err.Error())
 	}
 }
+
+// TestRealOSServiceBuildsService covers realOSService's success path (past the
+// empty-name guard): with a valid ServiceName it constructs a kardianos-backed
+// handle. Building the handle does not touch the OS service manager.
+func TestRealOSServiceBuildsService(t *testing.T) {
+	s, err := realOSService(Options{ServiceName: "daemon-harden-test", BinaryName: "t"})
+	if err != nil {
+		t.Fatalf("realOSService with a valid ServiceName: %v", err)
+	}
+
+	if s == nil {
+		t.Fatal("realOSService must return a non-nil osService on success")
+	}
+}
+
+// TestSvcStatusLabels covers every branch of svcStatusCommand's status→label
+// switch: a Status() error means "not installed", and each service.Status value
+// maps to its own label. All are friendly, non-erroring outcomes.
+func TestSvcStatusLabels(t *testing.T) {
+	cases := []struct {
+		name   string
+		status service.Status
+		err    error
+		want   string
+	}{
+		{"not installed", service.StatusUnknown, errors.New("no such service"), "not installed"},
+		{"running", service.StatusRunning, nil, "running"},
+		{"stopped", service.StatusStopped, nil, "stopped"},
+		{"unknown", service.StatusUnknown, nil, "unknown"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			withFakeOSService(t, &fakeOSService{status: tc.status, err: tc.err})
+
+			grp := svcCommand(Options{BinaryName: "t"}.withDefaults())
+			sub := findSub(t, grp, "status")
+			sub.SetContext(context.Background())
+
+			var out bytes.Buffer
+
+			sub.SetOut(&out)
+			sub.SetErr(&out)
+
+			if err := sub.RunE(sub, nil); err != nil {
+				t.Fatalf("status RunE: %v", err)
+			}
+
+			if got := strings.TrimSpace(out.String()); got != tc.want {
+				t.Fatalf("status label = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
