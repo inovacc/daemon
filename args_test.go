@@ -45,6 +45,49 @@ func TestMonitorArgsCarryUserOverriddenPorts(t *testing.T) {
 	}
 }
 
+func TestMonitorArgsForwardConsumerSetPorts(t *testing.T) {
+	// A consumer can only set the PUBLIC HTTPPort/GRPCPort fields (portsExplicit is
+	// unexported). withDefaults must derive that non-default ports are explicit so
+	// the monitor forwards them — otherwise the worker silently reverts to 9500/9501.
+	o := Options{BinaryName: "myapp", HTTPPort: 8080, GRPCPort: 8081}.withDefaults()
+
+	if !o.portsExplicit {
+		t.Fatalf("withDefaults should derive portsExplicit from consumer-set ports")
+	}
+
+	args := o.buildMonitorArgs()
+	if !hasFlagValue(args, "--port", "8080") || !hasFlagValue(args, "--grpc-port", "8081") {
+		t.Fatalf("monitor args should forward consumer-set ports: %v", args)
+	}
+}
+
+func TestMonitorArgsForwardWhenSinglePortOverridden(t *testing.T) {
+	// Overriding only one port still marks the pair explicit; the other keeps its default.
+	o := Options{BinaryName: "myapp", HTTPPort: 8080}.withDefaults()
+	if !o.portsExplicit {
+		t.Fatalf("overriding one port should mark ports explicit")
+	}
+
+	args := o.buildMonitorArgs()
+	if !hasFlagValue(args, "--port", "8080") || !hasFlagValue(args, "--grpc-port", "9501") {
+		t.Fatalf("monitor args should forward overridden port + defaulted grpc: %v", args)
+	}
+}
+
+func TestMonitorArgsIdempotentDefaultsStayImplicit(t *testing.T) {
+	// withDefaults is applied more than once in the real flow (AttachCommands then
+	// Start). A second pass over already-defaulted ports must NOT flip portsExplicit,
+	// or every consumer would spuriously forward the compiled-in defaults.
+	o := Options{BinaryName: "myapp"}.withDefaults().withDefaults()
+	if o.portsExplicit {
+		t.Fatalf("double withDefaults must not mark default ports explicit")
+	}
+
+	if args := o.buildMonitorArgs(); slices.Contains(args, "--port") {
+		t.Fatalf("monitor args must not carry default ports after double withDefaults: %v", args)
+	}
+}
+
 func hasFlagValue(args []string, flag, val string) bool {
 	for i := 0; i+1 < len(args); i++ {
 		if args[i] == flag && args[i+1] == val {

@@ -72,6 +72,22 @@ func (o Options) logger() *slog.Logger {
 
 // withDefaults returns a copy with zero-valued fields filled in.
 func (o Options) withDefaults() Options {
+	// Derive portsExplicit from the consumer's choice BEFORE filling defaults: a
+	// non-default port means they overrode it, so the monitor must forward it to
+	// the worker (buildMonitorArgs). Without this the flag is unreachable for any
+	// external caller and the worker silently reverts to the compiled-in defaults.
+	//
+	// The rule is "non-default", not "non-zero", so the derivation is idempotent:
+	// withDefaults runs twice in the real flow (AttachCommands then Start), and a
+	// second pass over already-defaulted 9500/9501 ports must not flip the flag.
+	// Setting a port to exactly its default is treated as implicit — forwarding it
+	// would be identical to the worker's own default, so nothing is lost. We only
+	// ever OR the flag true, never reset it (preserves a caller-set value).
+	if (o.HTTPPort != 0 && o.HTTPPort != DefaultHTTPPort) ||
+		(o.GRPCPort != 0 && o.GRPCPort != DefaultGRPCPort) {
+		o.portsExplicit = true
+	}
+
 	if o.HTTPPort == 0 {
 		o.HTTPPort = DefaultHTTPPort
 	}
