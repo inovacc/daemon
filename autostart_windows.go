@@ -23,7 +23,10 @@ const runKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
 type runKeyStore interface {
 	set(root registry.Key, name, value string) error
 	del(root registry.Key, name string) error
-	get(root registry.Key, name string) (value string, present bool)
+	// get reports the value's presence. A missing key/value is (\"\", false, nil);
+	// err is non-nil only for an UNEXPECTED failure (e.g. permission denied), which
+	// Status surfaces instead of silently reporting \"not enabled\".
+	get(root registry.Key, name string) (value string, present bool, err error)
 }
 
 // Seams overridden in tests; production points at the real OS-backed impls below.
@@ -86,11 +89,22 @@ func (w *windowsAutostart) Disable(method autostartMethod, elevated bool) error 
 }
 
 func (w *windowsAutostart) Status() ([]autostartEntry, error) {
-	return []autostartEntry{
-		w.runKeyStatus(false),
-		w.runKeyStatus(true),
-		w.taskStatus(),
-	}, nil
+	userKey, err := w.runKeyStatus(false)
+	if err != nil {
+		return nil, err
+	}
+
+	machineKey, err := w.runKeyStatus(true)
+	if err != nil {
+		return nil, err
+	}
+
+	task, err := w.taskStatus()
+	if err != nil {
+		return nil, err
+	}
+
+	return []autostartEntry{userKey, machineKey, task}, nil
 }
 
 // runKeyRoot picks the hive: HKLM for the elevated all-users registration, HKCU
@@ -111,7 +125,7 @@ func (w *windowsAutostart) deleteRunKey(elevated bool) error {
 	return runKeys.del(runKeyRoot(elevated), w.name)
 }
 
-func (w *windowsAutostart) runKeyStatus(elevated bool) autostartEntry {
+func (w *windowsAutostart) runKeyStatus(elevated bool) (autostartEntry, error) {
 	scope := "user"
 	if elevated {
 		scope = "machine"
@@ -119,12 +133,17 @@ func (w *windowsAutostart) runKeyStatus(elevated bool) autostartEntry {
 
 	e := autostartEntry{Method: methodStartup, Scope: scope}
 
-	if v, present := runKeys.get(runKeyRoot(elevated), w.name); present {
+	v, present, err := runKeys.get(runKeyRoot(elevated), w.name)
+	if err != nil {
+		return e, err
+	}
+
+	if present {
 		e.Enabled = true
 		e.Target = v
 	}
 
-	return e
+	return e, nil
 }
 
 // createTask registers an ONLOGON scheduled task. With elevated set it runs as
@@ -148,20 +167,28 @@ func (w *windowsAutostart) deleteTask() error {
 	return runSchtasksFn([]string{"/Delete", "/TN", w.name, "/F"})
 }
 
-func (w *windowsAutostart) taskStatus() autostartEntry {
+func (w *windowsAutostart) taskStatus() (autostartEntry, error) {
 	e := autostartEntry{Method: methodTaskScheduler, Scope: "logon", Target: w.target}
 
-	// queryTaskFn reports false when the task is absent; that is the "not enabled"
-	// signal, not an error to surface.
-	if queryTaskFn(w.name) {
+	// queryTaskFn reports false when the task is absent (the "not enabled" signal);
+	// a non-nil error means the query itself failed unexpectedly (e.g. schtasks.exe
+	// missing) and must be surfaced, not reported as "not enabled".
+	present, err := queryTaskFn(w.name)
+	if err != nil {
+		e.Target = ""
+
+		return e, err
+	}
+
+	if present {
 		e.Enabled = true
 
-		return e
+		return e, nil
 	}
 
 	e.Target = ""
 
-	return e
+	return e, nil
 }
 
 // winRunKeyStore is the production runKeyStore backed by the Windows registry.
@@ -198,25 +225,46 @@ func (winRunKeyStore) del(root registry.Key, name string) error {
 	return nil
 }
 
-func (winRunKeyStore) get(root registry.Key, name string) (string, bool) {
+func (winRunKeyStore) get(root registry.Key, name string) (string, bool, error) {
 	k, err := registry.OpenKey(root, runKeyPath, registry.QUERY_VALUE)
 	if err != nil {
-		return "", false
+		if errors.Is(err, registry.ErrNotExist) {
+			return "", false, nil // the Run key itself is absent — simply not enabled
+		}
+
+		return "", false, fmt.Errorf("open Run key: %w", err)
 	}
 
 	defer func() { _ = k.Close() }()
 
-	if v, _, err := k.GetStringValue(name); err == nil {
-		return v, true
+	v, _, err := k.GetStringValue(name)
+	if err != nil {
+		if errors.Is(err, registry.ErrNotExist) {
+			return "", false, nil // value absent — not enabled
+		}
+
+		return "", false, fmt.Errorf("get Run value: %w", err)
 	}
 
-	return "", false
+	return v, true, nil
 }
 
-// queryTask reports whether a scheduled task with the given name exists.
-func queryTask(name string) bool {
-	// /Query exits non-zero when the task is absent.
-	return exec.Command("schtasks.exe", "/Query", "/TN", name).Run() == nil
+// queryTask reports whether a scheduled task with the given name exists. A non-zero
+// schtasks exit (an *exec.ExitError) means the task is absent — reported as (false,
+// nil). Any error that prevents schtasks from running at all (e.g. the binary is
+// missing) is surfaced so Status does not mask it as "not enabled".
+func queryTask(name string) (bool, error) {
+	err := exec.Command("schtasks.exe", "/Query", "/TN", name).Run()
+	if err == nil {
+		return true, nil
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return false, nil
+	}
+
+	return false, fmt.Errorf("schtasks /Query %s: %w", name, err)
 }
 
 // runSchtasks invokes schtasks.exe and folds its output into any error so the

@@ -3,6 +3,7 @@
 package daemon
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -21,6 +22,7 @@ type regOp struct {
 type fakeRunKeys struct {
 	sets, dels []regOp
 	vals       map[string]string // "root|name" -> value
+	getErr     error             // when set, get returns it (simulates an unexpected registry failure)
 }
 
 func rkKey(root registry.Key, name string) string { return fmt.Sprintf("%d|%s", root, name) }
@@ -44,9 +46,14 @@ func (f *fakeRunKeys) del(root registry.Key, name string) error {
 	return nil
 }
 
-func (f *fakeRunKeys) get(root registry.Key, name string) (string, bool) {
+func (f *fakeRunKeys) get(root registry.Key, name string) (string, bool, error) {
+	if f.getErr != nil {
+		return "", false, f.getErr
+	}
+
 	v, ok := f.vals[rkKey(root, name)]
-	return v, ok
+
+	return v, ok, nil
 }
 
 // withWindowsAutostartSeams swaps the registry/schtasks seams for the test and a
@@ -69,7 +76,7 @@ func withWindowsAutostartSeams(t *testing.T, rk runKeyStore, taskPresent bool) *
 		calls = append(calls, args)
 		return nil
 	}
-	queryTaskFn = func(string) bool { return taskPresent }
+	queryTaskFn = func(string) (bool, error) { return taskPresent, nil }
 
 	return &calls
 }
@@ -237,6 +244,34 @@ func TestWindowsStatusAllAbsent(t *testing.T) {
 		if e.Enabled {
 			t.Fatalf("entry[%d] = %+v, want all disabled", i, e)
 		}
+	}
+}
+
+func TestWindowsStatusSurfacesRunKeyError(t *testing.T) {
+	// An unexpected registry error (e.g. permission denied) must be surfaced by
+	// Status, not silently reported as "not enabled".
+	wantErr := errors.New("access denied")
+	withWindowsAutostartSeams(t, &fakeRunKeys{getErr: wantErr}, false)
+
+	w := newWinAutostart()
+	if _, err := w.Status(); !errors.Is(err, wantErr) {
+		t.Fatalf("Status err = %v, want %v", err, wantErr)
+	}
+}
+
+func TestWindowsStatusSurfacesTaskError(t *testing.T) {
+	// The registry side is clean; the task query fails unexpectedly. Status surfaces it.
+	origKeys, origRun, origQuery := runKeys, runSchtasksFn, queryTaskFn
+
+	t.Cleanup(func() { runKeys, runSchtasksFn, queryTaskFn = origKeys, origRun, origQuery })
+
+	wantErr := errors.New("schtasks.exe missing")
+	runKeys = &fakeRunKeys{}
+	queryTaskFn = func(string) (bool, error) { return false, wantErr }
+
+	w := newWinAutostart()
+	if _, err := w.Status(); !errors.Is(err, wantErr) {
+		t.Fatalf("Status err = %v, want %v", err, wantErr)
 	}
 }
 
