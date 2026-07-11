@@ -56,6 +56,7 @@ func withWindowsAutostartSeams(t *testing.T, rk runKeyStore, taskPresent bool) *
 	t.Helper()
 
 	origKeys, origRun, origQuery := runKeys, runSchtasksFn, queryTaskFn
+
 	t.Cleanup(func() { runKeys, runSchtasksFn, queryTaskFn = origKeys, origRun, origQuery })
 
 	var calls [][]string

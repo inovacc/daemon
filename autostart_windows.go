@@ -172,6 +172,7 @@ func (winRunKeyStore) set(root registry.Key, name, value string) error {
 	if err != nil {
 		return fmt.Errorf("open Run key: %w", err)
 	}
+
 	defer func() { _ = k.Close() }()
 
 	if err := k.SetStringValue(name, value); err != nil {
@@ -186,6 +187,7 @@ func (winRunKeyStore) del(root registry.Key, name string) error {
 	if err != nil {
 		return fmt.Errorf("open Run key: %w", err)
 	}
+
 	defer func() { _ = k.Close() }()
 
 	// Deleting an already-absent value is success (idempotent disable).
@@ -201,6 +203,7 @@ func (winRunKeyStore) get(root registry.Key, name string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
+
 	defer func() { _ = k.Close() }()
 
 	if v, _, err := k.GetStringValue(name); err == nil {

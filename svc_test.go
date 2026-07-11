@@ -220,6 +220,7 @@ func runSvc(t *testing.T, o Options, args ...string) (string, error) {
 func TestSvcInstallWithAutostartRegistersElevatedTrigger(t *testing.T) {
 	osFake := &fakeOSService{}
 	asFake := &fakeAutostart{}
+
 	withFakeOSService(t, osFake)
 	withFakeAutostart(t, asFake, true) // elevated
 
@@ -245,6 +246,7 @@ func TestSvcInstallWithAutostartRegistersElevatedTrigger(t *testing.T) {
 func TestSvcUninstallWithAutostartRemovesTrigger(t *testing.T) {
 	osFake := &fakeOSService{}
 	asFake := &fakeAutostart{}
+
 	withFakeOSService(t, osFake)
 	withFakeAutostart(t, asFake, true)
 
@@ -270,6 +272,7 @@ func TestSvcUninstallWithAutostartRemovesTrigger(t *testing.T) {
 func TestSvcInstallAutostartBadMethodFailsBeforeInstall(t *testing.T) {
 	osFake := &fakeOSService{}
 	asFake := &fakeAutostart{}
+
 	withFakeOSService(t, osFake)
 	withFakeAutostart(t, asFake, true)
 

@@ -203,19 +203,19 @@ func autostartStatusCommand(o Options) *cobra.Command {
 				return fmt.Errorf("autostart status: %w", err)
 			}
 
-			any := false
+			anyEnabled := false
 
 			for _, e := range entries {
 				if !e.Enabled {
 					continue
 				}
 
-				any = true
+				anyEnabled = true
 
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s (%s): %s\n", e.Method, e.Scope, e.Target)
 			}
 
-			if !any {
+			if !anyEnabled {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "not enabled")
 			}
 
