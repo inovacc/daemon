@@ -116,7 +116,16 @@ func stopCommand(o Options) *cobra.Command {
 		Use:   "stop",
 		Short: "Stop the background daemon",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := Stop(o); err != nil {
+			err := Stop(o)
+			// Idempotent: stopping something that is already stopped is a benign
+			// success, not a failure — mirrors start's ErrAlreadyRunning handling so
+			// repeated `stop` (or stop-after-crash) exits 0 instead of erroring.
+			if errors.Is(err, ErrNotRunning) {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "not running")
+				return nil
+			}
+
+			if err != nil {
 				return err
 			}
 

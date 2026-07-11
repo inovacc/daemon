@@ -220,15 +220,41 @@ func TestStopCommandSuccess(t *testing.T) {
 	}
 }
 
-func TestStopCommandPropagatesError(t *testing.T) {
-	// No record → Stop returns ErrNotRunning, which must reach the caller (not print "stopped").
+func TestStopCommandIdempotentWhenNotRunning(t *testing.T) {
+	// No record → Stop returns ErrNotRunning; the command must treat that as a
+	// benign, exit-0 outcome ("not running"), not a hard CLI failure.
 	out, err := runSubcommand(t, stopCommand(Options{BinaryName: "t", DataDir: t.TempDir()}.withDefaults()), "stop")
-	if !errors.Is(err, ErrNotRunning) {
-		t.Fatalf("err = %v, want ErrNotRunning", err)
+	if err != nil {
+		t.Fatalf("stopping a stopped daemon must not error, got %v", err)
+	}
+
+	if !strings.Contains(out, "not running") {
+		t.Fatalf("output %q must report not running", out)
 	}
 
 	if strings.Contains(out, "stopped") {
 		t.Fatalf("output %q must not claim stopped when nothing was running", out)
+	}
+}
+
+func TestStopCommandPropagatesError(t *testing.T) {
+	dir := t.TempDir()
+	_ = serverinfo.NewStore(dir).Write(serverinfo.Info{PID: os.Getpid()})
+	orig := stopProcessFn
+
+	t.Cleanup(func() { stopProcessFn = orig })
+	// A real termination failure (not ErrNotRunning) must still propagate so the
+	// idempotency shortcut cannot mask a genuine stop error.
+	sentinel := errors.New("kill boom")
+	stopProcessFn = func(int) error { return sentinel }
+
+	out, err := runSubcommand(t, stopCommand(Options{BinaryName: "t", DataDir: dir}.withDefaults()), "stop")
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("err = %v, want the underlying stop failure", err)
+	}
+
+	if strings.Contains(out, "stopped") {
+		t.Fatalf("output %q must not claim stopped on a failed stop", out)
 	}
 }
 

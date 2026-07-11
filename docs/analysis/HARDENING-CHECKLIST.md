@@ -83,9 +83,10 @@ Legend: `[ ]` unchecked · sev = severity · lev = leverage. See HARDENING-RUNBO
   - blocks: — · unblocks: — · verify: `go test -run Svc -cover ./...`
   - Cover realOSService guard + svcStatusCommand branches.
   - DONE 2026-07-11: +TestRealOSServiceBuildsService (success path past the empty-name guard) + TestSvcStatusLabels (table over not-installed/running/stopped/unknown — every status→label switch branch). realOSService 42%→85.7%, svcStatusCommand →92.3%; root pkg 76.3%→77.6%. Race + 3-OS build + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
-- [ ] **H-19** · ERR-05 · error-handling · sev Low · lev 2 · `cobra.go:104`
+- [x] **H-19** · ERR-05 · error-handling · sev Low · lev 2 · `cobra.go:104`
   - blocks: — · unblocks: — · verify: `go test ./... -run TestStop`
   - Make stop idempotent on ErrNotRunning.
+  - DONE 2026-07-11: stopCommand now maps ErrNotRunning to a benign "not running" / exit-0 (mirrors start's ErrAlreadyRunning), so repeated stop / stop-after-crash no longer errors. Stop() itself still returns the sentinel (unchanged API). Repurposed the H-16 not-running test to assert idempotency + added a real stopProcessFn-failure test so genuine stop errors still propagate. stopCommand 100%; root pkg 77.6%→78.0%. Race + 3-OS build + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
 - [ ] **H-20** · ERR-06 · error-handling · sev Low · lev 1 · `daemonize.go:94`
   - blocks: — · unblocks: — · verify: `go vet ./...`
   - Log store.Remove() error as non-fatal warning.
