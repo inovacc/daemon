@@ -1,11 +1,15 @@
 package daemon
 
 import (
+	"bytes"
 	"errors"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/inovacc/daemon/internal/serverinfo"
+	"github.com/spf13/cobra"
 )
 
 func TestChildEnvName(t *testing.T) {
@@ -71,6 +75,55 @@ func TestStartSpawnsAndWaits(t *testing.T) {
 
 	if pid != 4242 {
 		t.Errorf("pid = %d, want 4242", pid)
+	}
+}
+
+func TestStartHealthCheckTimeout(t *testing.T) {
+	dir := t.TempDir()
+	origSpawn, origTimeout := spawnDetachedFn, healthWaitTimeout
+
+	t.Cleanup(func() { spawnDetachedFn, healthWaitTimeout = origSpawn, origTimeout })
+
+	healthWaitTimeout = 20 * time.Millisecond
+	// Spawn succeeds but the "monitor" never writes serverinfo (e.g. it crashed on
+	// startup). Start must surface the unconfirmed state, not report silent success.
+	spawnDetachedFn = func(_ string, _, _ []string) (int, error) { return 4242, nil }
+
+	pid, err := Start(Options{BinaryName: "t", DataDir: dir})
+	if !errors.Is(err, ErrHealthCheckTimeout) {
+		t.Fatalf("err = %v, want ErrHealthCheckTimeout", err)
+	}
+	// The spawned pid must still come back so the caller can inspect/kill it.
+	if pid != 4242 {
+		t.Errorf("pid = %d, want 4242", pid)
+	}
+}
+
+func TestStartCommandReportsUnconfirmed(t *testing.T) {
+	dir := t.TempDir()
+	origSpawn, origTimeout := spawnDetachedFn, healthWaitTimeout
+
+	t.Cleanup(func() { spawnDetachedFn, healthWaitTimeout = origSpawn, origTimeout })
+
+	healthWaitTimeout = 20 * time.Millisecond
+	spawnDetachedFn = func(_ string, _, _ []string) (int, error) { return 4242, nil }
+
+	root := &cobra.Command{Use: "daemon"}
+	root.AddCommand(startCommand(Options{BinaryName: "t", DataDir: dir}.withDefaults()))
+
+	var buf bytes.Buffer
+
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"start"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("start: %v", err) // unconfirmed is not a hard CLI failure
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "4242") || !strings.Contains(out, "unconfirmed") {
+		t.Fatalf("output %q must report the pid and an unconfirmed status", out)
 	}
 }
 

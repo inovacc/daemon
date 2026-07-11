@@ -90,6 +90,16 @@ func startCommand(o Options) *cobra.Command {
 				return nil
 			}
 
+			// Spawned but readiness unconfirmed: report the pid with an explicit
+			// unconfirmed status rather than a bare "started" (which would hide a
+			// crashed monitor) or a hard error (which would false-alarm a slow one).
+			if errors.Is(err, ErrHealthCheckTimeout) {
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(),
+					"started: pid=%d (unconfirmed: monitor did not report ready in time; run 'status' to verify)\n", pid)
+
+				return nil
+			}
+
 			if err != nil {
 				return err
 			}
