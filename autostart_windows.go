@@ -17,6 +17,22 @@ import (
 // user) and HKLM (all users). Reflects Syncthing's "Startup" method.
 const runKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
 
+// runKeyStore abstracts the registry Run-key operations so the Startup-method
+// logic (hive selection, status assembly) is testable without touching the real
+// registry. del treats an already-absent value as success; get reports presence.
+type runKeyStore interface {
+	set(root registry.Key, name, value string) error
+	del(root registry.Key, name string) error
+	get(root registry.Key, name string) (value string, present bool)
+}
+
+// Seams overridden in tests; production points at the real OS-backed impls below.
+var (
+	runKeys      runKeyStore = winRunKeyStore{}
+	runSchtasksFn             = runSchtasks
+	queryTaskFn              = queryTask
+)
+
 // windowsAutostart implements autostartManager against the registry Run key
 // (Startup method) and schtasks.exe (Task Scheduler method).
 type windowsAutostart struct {
@@ -84,32 +100,11 @@ func runKeyRoot(elevated bool) registry.Key {
 }
 
 func (w *windowsAutostart) writeRunKey(elevated bool) error {
-	k, err := registry.OpenKey(runKeyRoot(elevated), runKeyPath, registry.SET_VALUE)
-	if err != nil {
-		return fmt.Errorf("open Run key: %w", err)
-	}
-	defer func() { _ = k.Close() }()
-
-	if err := k.SetStringValue(w.name, w.target); err != nil {
-		return fmt.Errorf("set Run value: %w", err)
-	}
-
-	return nil
+	return runKeys.set(runKeyRoot(elevated), w.name, w.target)
 }
 
 func (w *windowsAutostart) deleteRunKey(elevated bool) error {
-	k, err := registry.OpenKey(runKeyRoot(elevated), runKeyPath, registry.SET_VALUE)
-	if err != nil {
-		return fmt.Errorf("open Run key: %w", err)
-	}
-	defer func() { _ = k.Close() }()
-
-	// Deleting an already-absent value is success (idempotent disable).
-	if err := k.DeleteValue(w.name); err != nil && !errors.Is(err, syscall.ERROR_FILE_NOT_FOUND) {
-		return fmt.Errorf("delete Run value: %w", err)
-	}
-
-	return nil
+	return runKeys.del(runKeyRoot(elevated), w.name)
 }
 
 func (w *windowsAutostart) runKeyStatus(elevated bool) autostartEntry {
@@ -120,13 +115,7 @@ func (w *windowsAutostart) runKeyStatus(elevated bool) autostartEntry {
 
 	e := autostartEntry{Method: methodStartup, Scope: scope}
 
-	k, err := registry.OpenKey(runKeyRoot(elevated), runKeyPath, registry.QUERY_VALUE)
-	if err != nil {
-		return e
-	}
-	defer func() { _ = k.Close() }()
-
-	if v, _, err := k.GetStringValue(w.name); err == nil {
+	if v, present := runKeys.get(runKeyRoot(elevated), w.name); present {
 		e.Enabled = true
 		e.Target = v
 	}
@@ -148,28 +137,79 @@ func (w *windowsAutostart) createTask(elevated bool) error {
 		args = append(args, "/RU", "SYSTEM", "/RL", "HIGHEST")
 	}
 
-	return runSchtasks(args)
+	return runSchtasksFn(args)
 }
 
 func (w *windowsAutostart) deleteTask() error {
-	return runSchtasks([]string{"/Delete", "/TN", w.name, "/F"})
+	return runSchtasksFn([]string{"/Delete", "/TN", w.name, "/F"})
 }
 
 func (w *windowsAutostart) taskStatus() autostartEntry {
 	e := autostartEntry{Method: methodTaskScheduler, Scope: "logon", Target: w.target}
 
-	// /Query exits non-zero when the task is absent; that is the "not enabled"
+	// queryTaskFn reports false when the task is absent; that is the "not enabled"
 	// signal, not an error to surface.
-	if err := exec.Command("schtasks.exe", "/Query", "/TN", w.name).Run(); err != nil {
-		e.Enabled = false
-		e.Target = ""
+	if queryTaskFn(w.name) {
+		e.Enabled = true
 
 		return e
 	}
 
-	e.Enabled = true
+	e.Target = ""
 
 	return e
+}
+
+// winRunKeyStore is the production runKeyStore backed by the Windows registry.
+type winRunKeyStore struct{}
+
+func (winRunKeyStore) set(root registry.Key, name, value string) error {
+	k, err := registry.OpenKey(root, runKeyPath, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("open Run key: %w", err)
+	}
+	defer func() { _ = k.Close() }()
+
+	if err := k.SetStringValue(name, value); err != nil {
+		return fmt.Errorf("set Run value: %w", err)
+	}
+
+	return nil
+}
+
+func (winRunKeyStore) del(root registry.Key, name string) error {
+	k, err := registry.OpenKey(root, runKeyPath, registry.SET_VALUE)
+	if err != nil {
+		return fmt.Errorf("open Run key: %w", err)
+	}
+	defer func() { _ = k.Close() }()
+
+	// Deleting an already-absent value is success (idempotent disable).
+	if err := k.DeleteValue(name); err != nil && !errors.Is(err, syscall.ERROR_FILE_NOT_FOUND) {
+		return fmt.Errorf("delete Run value: %w", err)
+	}
+
+	return nil
+}
+
+func (winRunKeyStore) get(root registry.Key, name string) (string, bool) {
+	k, err := registry.OpenKey(root, runKeyPath, registry.QUERY_VALUE)
+	if err != nil {
+		return "", false
+	}
+	defer func() { _ = k.Close() }()
+
+	if v, _, err := k.GetStringValue(name); err == nil {
+		return v, true
+	}
+
+	return "", false
+}
+
+// queryTask reports whether a scheduled task with the given name exists.
+func queryTask(name string) bool {
+	// /Query exits non-zero when the task is absent.
+	return exec.Command("schtasks.exe", "/Query", "/TN", name).Run() == nil
 }
 
 // runSchtasks invokes schtasks.exe and folds its output into any error so the
