@@ -200,6 +200,91 @@ func TestSvcVerbPropagatesError(t *testing.T) {
 	}
 }
 
+// runSvc executes the wired `svc` subtree (with flag parsing) under a root named
+// "daemon" and returns combined output + the RunE error.
+func runSvc(t *testing.T, o Options, args ...string) (string, error) {
+	t.Helper()
+
+	root := &cobra.Command{Use: "daemon"}
+	root.AddCommand(svcCommand(o))
+
+	var buf bytes.Buffer
+
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs(args)
+
+	return func() (string, error) { err := root.Execute(); return buf.String(), err }()
+}
+
+func TestSvcInstallWithAutostartRegistersElevatedTrigger(t *testing.T) {
+	osFake := &fakeOSService{}
+	asFake := &fakeAutostart{}
+	withFakeOSService(t, osFake)
+	withFakeAutostart(t, asFake, true) // elevated
+
+	out, err := runSvc(t, Options{ServiceName: "daemon"}.withDefaults(), "svc", "install", "--autostart")
+	if err != nil {
+		t.Fatalf("install --autostart: %v", err)
+	}
+
+	if len(osFake.calls) != 1 || osFake.calls[0] != "install" {
+		t.Fatalf("osService calls = %v, want [install]", osFake.calls)
+	}
+
+	// Default combined method is taskscheduler, registered elevated (SYSTEM/HIGHEST).
+	if len(asFake.enable) != 1 || asFake.enable[0].method != methodTaskScheduler || !asFake.enable[0].elevated {
+		t.Fatalf("autostart Enable = %+v, want one taskscheduler/elevated", asFake.enable)
+	}
+
+	if !strings.Contains(out, "installed") || !strings.Contains(out, "autostart enabled") {
+		t.Fatalf("output %q missing installed/autostart lines", out)
+	}
+}
+
+func TestSvcUninstallWithAutostartRemovesTrigger(t *testing.T) {
+	osFake := &fakeOSService{}
+	asFake := &fakeAutostart{}
+	withFakeOSService(t, osFake)
+	withFakeAutostart(t, asFake, true)
+
+	out, err := runSvc(t, Options{ServiceName: "daemon"}.withDefaults(),
+		"svc", "uninstall", "--autostart", "--autostart-method", "startup")
+	if err != nil {
+		t.Fatalf("uninstall --autostart: %v", err)
+	}
+
+	if len(osFake.calls) != 1 || osFake.calls[0] != "uninstall" {
+		t.Fatalf("osService calls = %v, want [uninstall]", osFake.calls)
+	}
+
+	if len(asFake.disable) != 1 || asFake.disable[0].method != methodStartup || !asFake.disable[0].elevated {
+		t.Fatalf("autostart Disable = %+v, want one startup/elevated", asFake.disable)
+	}
+
+	if !strings.Contains(out, "uninstalled") || !strings.Contains(out, "autostart disabled") {
+		t.Fatalf("output %q missing uninstalled/autostart lines", out)
+	}
+}
+
+func TestSvcInstallAutostartBadMethodFailsBeforeInstall(t *testing.T) {
+	osFake := &fakeOSService{}
+	asFake := &fakeAutostart{}
+	withFakeOSService(t, osFake)
+	withFakeAutostart(t, asFake, true)
+
+	_, err := runSvc(t, Options{ServiceName: "daemon"}.withDefaults(),
+		"svc", "install", "--autostart", "--autostart-method", "bogus")
+	if err == nil {
+		t.Fatal("install with bad autostart method: want error")
+	}
+
+	// Fast-fail: the service must NOT have been installed.
+	if len(osFake.calls) != 0 {
+		t.Fatalf("osService must not be touched on bad method; got %v", osFake.calls)
+	}
+}
+
 // TestRealOSServiceEmptyServiceName asserts realOSService returns the friendly
 // wrapped error (the guard before service.New) when called WITHOUT withDefaults,
 // so BinaryName/ServiceName are empty.

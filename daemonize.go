@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/inovacc/daemon/pkg/serverinfo"
+	"github.com/inovacc/daemon/internal/serverinfo"
 )
 
 // ErrAlreadyRunning is returned by Start when a live instance already exists.

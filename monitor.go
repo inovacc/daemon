@@ -9,7 +9,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/inovacc/daemon/pkg/serverinfo"
+	"github.com/inovacc/daemon/internal/serverinfo"
 )
 
 // monitor supervises the worker: it spawns the inner process, watches its exit code,

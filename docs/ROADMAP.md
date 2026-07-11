@@ -8,7 +8,7 @@
 ### Phase 1: Foundation [DONE]
 - [x] Project scaffold (structure, tooling, CI, BSD-3 license)
 - [x] Service-layer design spec (`docs/SERVICE_LIFECYCLE.md`)
-- [x] Public library API surface under `pkg/daemon` (Options, AttachCommands, RunMonitor/RunWorker)
+- [x] Public library API surface at the module root (Options, AttachCommands, RunMonitor/RunWorker)
 - [x] `serverinfo` package (monitor-PID file: write/read/IsRunning + stale self-heal), platform liveness
 
 ### Phase 2: Core Features [IN PROGRESS]

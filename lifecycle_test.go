@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/inovacc/daemon/pkg/serverinfo"
+	"github.com/inovacc/daemon/internal/serverinfo"
 )
 
 func captureLogger() (*slog.Logger, *bytes.Buffer) {

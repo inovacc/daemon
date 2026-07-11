@@ -5,8 +5,8 @@
 - **Status:** In Progress
 - **Goals:**
   - [x] Project scaffolding (library shell)
-  - [ ] `pkg/daemon` public API skeleton
-  - [ ] `serverinfo` package
+  - [x] `daemon` public API (root package: Options, AttachCommands, RunMonitor/RunWorker)
+  - [x] `internal/serverinfo` package
 
 ## v0.2.0 - Core Features
 - **Target:** TBD

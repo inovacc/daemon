@@ -136,11 +136,24 @@ func svcCommand(o Options) *cobra.Command {
 }
 
 func svcInstallCommand(o Options) *cobra.Command {
-	return &cobra.Command{
+	var (
+		autostart  bool
+		methodFlag string
+	)
+
+	c := &cobra.Command{
 		Use:   "install",
 		Short: "Register the service with the OS init system (privileged)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := RequirePrivilege(cmd); err != nil {
+				return err
+			}
+
+			// Build (and thus validate) the trigger manager BEFORE installing so an
+			// unsupported platform or bad --autostart-method fails fast, leaving no
+			// half-configured state.
+			mgr, method, err := autostartTrigger(o, autostart, methodFlag)
+			if err != nil {
 				return err
 			}
 
@@ -155,17 +168,41 @@ func svcInstallCommand(o Options) *cobra.Command {
 
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "installed")
 
+			if mgr != nil {
+				// svc install already passed RequirePrivilege, so register the
+				// elevated (all-users/SYSTEM) trigger — the Google shape: an elevated
+				// service PLUS an elevated logon trigger that starts it.
+				if err := mgr.Enable(method, true); err != nil {
+					return fmt.Errorf("svc install: service installed but autostart failed: %w", err)
+				}
+
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "autostart enabled")
+			}
+
 			return nil
 		},
 	}
+	addAutostartTriggerFlags(c, &autostart, &methodFlag, "also register")
+
+	return c
 }
 
 func svcUninstallCommand(o Options) *cobra.Command {
-	return &cobra.Command{
+	var (
+		autostart  bool
+		methodFlag string
+	)
+
+	c := &cobra.Command{
 		Use:   "uninstall",
 		Short: "Remove the service from the OS init system (privileged)",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := RequirePrivilege(cmd); err != nil {
+				return err
+			}
+
+			mgr, method, err := autostartTrigger(o, autostart, methodFlag)
+			if err != nil {
 				return err
 			}
 
@@ -180,9 +217,52 @@ func svcUninstallCommand(o Options) *cobra.Command {
 
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "uninstalled")
 
+			if mgr != nil {
+				if err := mgr.Disable(method, true); err != nil {
+					return fmt.Errorf("svc uninstall: service removed but autostart cleanup failed: %w", err)
+				}
+
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "autostart disabled")
+			}
+
 			return nil
 		},
 	}
+	addAutostartTriggerFlags(c, &autostart, &methodFlag, "also remove")
+
+	return c
+}
+
+// autostartTrigger returns the elevated autostart manager + parsed method for the
+// combined `svc install/uninstall --autostart` path, or (nil, "", nil) when the
+// flag is unset. The trigger launches "svc start" so it merely asks the SCM to
+// start the already-installed service (one process, no duplicate supervisor).
+func autostartTrigger(o Options, enabled bool, methodFlag string) (autostartManager, autostartMethod, error) {
+	if !enabled {
+		return nil, "", nil
+	}
+
+	method, err := parseMethod(methodFlag)
+	if err != nil {
+		return nil, "", err
+	}
+
+	mgr, err := newAutostartManager(o, []string{"svc", "start"})
+	if err != nil {
+		return nil, "", err
+	}
+
+	return mgr, method, nil
+}
+
+// addAutostartTriggerFlags registers the shared --autostart / --autostart-method
+// pair on a svc verb. verb is the action word for the help text ("also register"
+// / "also remove").
+func addAutostartTriggerFlags(c *cobra.Command, autostart *bool, methodFlag *string, verb string) {
+	c.Flags().BoolVar(autostart, "autostart", false,
+		fmt.Sprintf("%s an elevated logon trigger that starts the service (Windows)", verb))
+	c.Flags().StringVar(methodFlag, "autostart-method", string(methodTaskScheduler),
+		"trigger mechanism when --autostart: startup|taskscheduler")
 }
 
 func svcStartCommand(o Options) *cobra.Command {

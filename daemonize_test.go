@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/inovacc/daemon/pkg/serverinfo"
+	"github.com/inovacc/daemon/internal/serverinfo"
 )
 
 func TestChildEnvName(t *testing.T) {

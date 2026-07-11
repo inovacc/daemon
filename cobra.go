@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/inovacc/daemon/pkg/serverinfo"
+	"github.com/inovacc/daemon/internal/serverinfo"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +54,7 @@ func AttachCommands(root *cobra.Command, opts Options) error {
 	worker.Flags().IntVar(&httpPort, "port", o.HTTPPort, "HTTP port")
 	worker.Flags().IntVar(&grpcPort, "grpc-port", o.GRPCPort, "gRPC port")
 
-	root.AddCommand(service, monitor, worker, svcCommand(o))
+	root.AddCommand(service, monitor, worker, svcCommand(o), autostartCommand(o))
 
 	return nil
 }

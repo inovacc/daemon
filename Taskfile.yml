@@ -1,19 +1,9 @@
 version: '3'
 
+# daemon is a library module (no main package). These tasks cover quality and
+# dependency hygiene only; releases are plain git tags that consumers `go get`.
 vars:
-  APP_NAME: daemon
-  MAIN_PACKAGE: ./cmd/daemon
   COVERAGE_FILE: coverage.out
-  VERSION:
-    sh: git describe --tags --always --dirty 2>/dev/null || echo "dev"
-  COMMIT:
-    sh: git rev-parse --short HEAD 2>/dev/null || echo "none"
-  BUILD_DATE:
-    sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
-
-  GITHUB_OWNER:
-    sh: echo "${GITHUB_OWNER:-dyammarcano}"
-
 
 tasks:
   # === INFORMATION ===
@@ -22,52 +12,11 @@ tasks:
     cmds:
       - task --list
 
-  # === CODE GENERATION ===
-  generate:
-    desc: Generate version information
-    cmds:
-      - go generate ./...
-
-  # === BUILD TASKS ===
-  build:
-    desc: Build the application
-    cmds:
-      - go build -ldflags "-X main.Version=$VERSION -X main.GitHash=$COMMIT -X main.BuildTime=$BUILD_DATE" -o $APP_NAME
-    vars:
-      VERSION: "{{ .VERSION }}"
-      COMMIT: "{{ .COMMIT }}"
-      BUILD_DATE: "{{ .BUILD_DATE }}"
-      APP_NAME: "{{ .APP_NAME }}"
-
-  build:dev:
-    desc: Build development snapshot with goreleaser
-    deps: [generate]
-    env:
-      GITHUB_OWNER: "{{ .GITHUB_OWNER }}"
-    cmds:
-      - goreleaser build --snapshot --clean
-
-  build:prod:
-    desc: Build production snapshot with goreleaser
-    deps: [generate]
-    env:
-      GITHUB_OWNER: "{{ .GITHUB_OWNER }}"
-    cmds:
-      - goreleaser --snapshot --skip=publish,announce --clean
-
-  # === RUN TASKS ===
-  run:
-    desc: Run the application
-    cmds:
-      - go run {{ .MAIN_PACKAGE }} $CLI_ARGS
-    vars:
-      CLI_ARGS: "{{ .CLI_ARGS }}"
-
   # === TEST TASKS ===
   test:
-    desc: Run all tests with coverage
+    desc: Run all tests with race detector + coverage
     cmds:
-      - go test -v -race -coverprofile={{ .COVERAGE_FILE }} ./...
+      - go test -race -coverprofile={{ .COVERAGE_FILE }} ./...
 
   test:coverage:
     desc: Generate HTML coverage report
@@ -77,18 +26,13 @@ tasks:
       - echo "Coverage report generated at coverage.html"
 
   test:cover:
-    desc: Run tests and show coverage percentage
+    desc: Run tests and show total coverage percentage
     cmds:
       - go test -coverprofile={{ .COVERAGE_FILE }} ./...
       - cmd: go tool cover -func={{ .COVERAGE_FILE }} | findstr "total:"
         platforms: [windows]
       - cmd: go tool cover -func={{ .COVERAGE_FILE }} | grep "total:"
         platforms: [linux, darwin]
-
-  test:unit:
-    desc: Run unit tests only (skip integration)
-    cmds:
-      - go test -v -short ./...
 
   # === CODE QUALITY ===
   fmt:
@@ -112,12 +56,18 @@ tasks:
     cmds:
       - golangci-lint run --fix ./...
 
+  build:
+    desc: Type-check / compile every package (no binary is produced — library module)
+    cmds:
+      - go build ./...
+
   check:
-    desc: Run all quality checks (fmt, vet, lint, test)
+    desc: Run all quality checks (fmt, vet, lint, build, test)
     cmds:
       - task: fmt
       - task: vet
       - task: lint
+      - task: build
       - task: test
 
   # === DEPENDENCY MANAGEMENT ===
@@ -137,44 +87,6 @@ tasks:
 
   # === CLEANUP ===
   clean:
-    desc: Clean build artifacts and generated files
+    desc: Clean coverage artifacts
     cmds:
-      - rm -f {{ .APP_NAME }}
       - rm -f {{ .COVERAGE_FILE }} coverage.html
-
-      - rm -rf dist/
-
-  # === INSTALL ===
-  install:
-    desc: Install the application
-    cmds:
-      - go install -ldflags "-X main.Version=$VERSION -X main.GitHash=$COMMIT -X main.BuildTime=$BUILD_DATE"
-    vars:
-      VERSION: "{{ .VERSION }}"
-      COMMIT: "{{ .COMMIT }}"
-      BUILD_DATE: "{{ .BUILD_DATE }}"
-
-  # === RELEASE TASKS ===
-  release:
-    desc: Create a production release with goreleaser (requires git tag)
-    deps: [generate]
-    env:
-      GITHUB_OWNER: "{{ .GITHUB_OWNER }}"
-    cmds:
-      - goreleaser release --clean
-
-  release:snapshot:
-    desc: Create a snapshot release (no git tag required)
-    deps: [generate]
-    env:
-      GITHUB_OWNER: "{{ .GITHUB_OWNER }}"
-    cmds:
-      - goreleaser release --snapshot --clean
-
-  release:check:
-    desc: Validate goreleaser configuration
-    env:
-      GITHUB_OWNER: "{{ .GITHUB_OWNER }}"
-    cmds:
-      - goreleaser check
-

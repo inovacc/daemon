@@ -1,7 +1,9 @@
 # ADR-0001: Project Scaffold and Tooling Choices
 
 ## Status
-Accepted
+Accepted — the structure (`cmd/` + `pkg/`) and GoReleaser release decisions are
+superseded by [ADR-0002](0002-flatten-to-pure-library.md) (flattened to a pure
+library at the module root).
 
 ## Context
 `daemon` is a reusable Go module consolidating the daemon/service layers duplicated across
