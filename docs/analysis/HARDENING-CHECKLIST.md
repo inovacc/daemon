@@ -87,9 +87,10 @@ Legend: `[ ]` unchecked · sev = severity · lev = leverage. See HARDENING-RUNBO
   - blocks: — · unblocks: — · verify: `go test ./... -run TestStop`
   - Make stop idempotent on ErrNotRunning.
   - DONE 2026-07-11: stopCommand now maps ErrNotRunning to a benign "not running" / exit-0 (mirrors start's ErrAlreadyRunning), so repeated stop / stop-after-crash no longer errors. Stop() itself still returns the sentinel (unchanged API). Repurposed the H-16 not-running test to assert idempotency + added a real stopProcessFn-failure test so genuine stop errors still propagate. stopCommand 100%; root pkg 77.6%→78.0%. Race + 3-OS build + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
-- [ ] **H-20** · ERR-06 · error-handling · sev Low · lev 1 · `daemonize.go:94`
+- [x] **H-20** · ERR-06 · error-handling · sev Low · lev 1 · `daemonize.go:94`
   - blocks: — · unblocks: — · verify: `go vet ./...`
   - Log store.Remove() error as non-fatal warning.
+  - DONE 2026-07-11: Stop now logs a Warn (path + err) when server.json removal fails after a successful kill, instead of `_ = store.Remove()`. Still returns nil (process already gone; IsRunning self-heals). Tested deterministically: injected stopProcessFn swaps server.json for a non-empty dir so os.Remove refuses it on every platform, then assert the warning fires via an injected slog handler. Moves Observability dimension 3→4. Race + 3-OS build + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
 - [ ] **H-21** · ARCH-02 · architecture · sev Low · lev 2 · `monitor.go:31`
   - blocks: — · unblocks: — · verify: `go build ./...`
   - Move reexecFn into dedicated reexec.go.

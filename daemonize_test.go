@@ -3,7 +3,9 @@ package daemon
 import (
 	"bytes"
 	"errors"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -153,5 +155,49 @@ func TestStopCallsPlatformStop(t *testing.T) {
 	// serverinfo should be removed after stop
 	if serverinfo.NewStore(dir).IsRunning() != nil {
 		t.Error("serverinfo not removed after Stop")
+	}
+}
+
+// TestStopLogsRemoveFailureButSucceeds covers the non-fatal remove path: after the
+// worker is killed, a failure to delete server.json must be logged (not swallowed)
+// yet Stop must still return nil (the process is already gone; IsRunning self-heals).
+func TestStopLogsRemoveFailureButSucceeds(t *testing.T) {
+	dir := t.TempDir()
+	store := serverinfo.NewStore(dir)
+	_ = store.Write(serverinfo.Info{PID: os.Getpid()})
+
+	orig := stopProcessFn
+
+	t.Cleanup(func() { stopProcessFn = orig })
+	// IsRunning reads the valid file first; then the "kill" swaps server.json for a
+	// NON-EMPTY directory, which os.Remove refuses on every platform — forcing the
+	// warning branch deterministically without a Remove seam.
+	stopProcessFn = func(int) error {
+		path := store.Path()
+		if err := os.Remove(path); err != nil {
+			t.Fatalf("setup: remove file: %v", err)
+		}
+
+		if err := os.Mkdir(path, 0o755); err != nil {
+			t.Fatalf("setup: mkdir: %v", err)
+		}
+
+		if err := os.WriteFile(filepath.Join(path, "blocker"), []byte("x"), 0o644); err != nil {
+			t.Fatalf("setup: write blocker: %v", err)
+		}
+
+		return nil
+	}
+
+	var buf bytes.Buffer
+
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+
+	if err := Stop(Options{BinaryName: "t", DataDir: dir, Logger: logger}); err != nil {
+		t.Fatalf("Stop must not fail on a non-fatal remove error, got %v", err)
+	}
+
+	if out := buf.String(); !strings.Contains(out, "failed to remove server info file") {
+		t.Fatalf("expected a warning about the failed removal, got %q", out)
 	}
 }

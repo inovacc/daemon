@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -104,7 +105,13 @@ func Stop(o Options) error {
 		return fmt.Errorf("daemon: stop pid %d: %w", info.PID, err)
 	}
 
-	_ = store.Remove()
+	// The process is already gone, so a failure to delete the pid file is non-fatal:
+	// IsRunning self-heals a stale record on the next call. Do not swallow it silently,
+	// though — log it so an operator can see (and clean up) a leaked server.json.
+	if err := store.Remove(); err != nil {
+		o.logger().Warn("daemon: stopped worker but failed to remove server info file",
+			slog.String("path", store.Path()), slog.Any("err", err))
+	}
 
 	return nil
 }
