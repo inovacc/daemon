@@ -49,6 +49,11 @@ func newProgram(o Options) *program {
 
 // Start launches the supervisor in a cancelable goroutine and returns immediately,
 // as required by the kardianos service.Interface contract.
+//
+// Single-call invariant: the service manager calls Start exactly once per process
+// lifecycle. It is NOT safe to call twice — a second call would overwrite p.cancel
+// and p.done, orphaning the first goroutine. Do not invoke it directly outside the
+// service.Interface flow.
 func (p *program) Start(service.Service) error {
 	log := p.o.logger().With(slog.String("role", "os-service"))
 	ctx, cancel := context.WithCancel(context.Background())

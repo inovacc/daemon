@@ -8,6 +8,10 @@ import "time"
 //
 // Note: ExitRestart (intentional restart) must bypass this guard entirely — the
 // monitor loop `continue`s without calling isLoop or backoff for code 3.
+//
+// Concurrency: restartGuard is NOT safe for concurrent use. It is owned and mutated
+// by a single goroutine — the monitor loop — and must not be shared across goroutines
+// without external synchronization.
 type restartGuard struct {
 	size   int           // max restarts allowed within the window (e.g. 4)
 	window time.Duration // threshold window (e.g. 60s)
