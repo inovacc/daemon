@@ -75,9 +75,10 @@ Legend: `[ ]` unchecked · sev = severity · lev = leverage. See HARDENING-RUNBO
   - blocks: — · unblocks: — · verify: `go test -run Cobra -cover ./...`
   - Cover start/stop/status command branches + exit-code mapping.
   - DONE 2026-07-11: added runSubcommand harness + 8 branch tests (start already-running/success/error-propagation, stop success/not-running-propagation, status running/not-running). startCommand/stopCommand/statusCommand 0%→100%; root pkg 72.0%→75.3%. Exit-code mapping already covered by exitstatus_test. Race + 3-OS build + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
-- [ ] **H-17** · COV-03 · coverage · sev Med · lev 3 · `monitor.go:45`
+- [x] **H-17** · COV-03 · coverage · sev Med · lev 3 · `monitor.go:45`
   - blocks: — · unblocks: — · verify: `go test -run Monitor -cover ./...`
   - Direct RunMonitor test with cancelled ctx + fake spawnFn.
+  - DONE 2026-07-11: +2 tests — RunMonitor(pre-cancelled ctx) covers the public entry + top-of-loop cancellation + serverinfo write/defer-remove; m.run with a spawn that cancels covers handleCrash's ctx.Done() branch. RunMonitor 0%→100%, handleCrash 100%; root pkg 75.3%→76.3%. (realSpawn stays 0% — thin os/exec leaf.) Race + 3-OS build + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
 - [ ] **H-18** · COV-04 · coverage · sev Low · lev 2 · `svc.go:96`
   - blocks: — · unblocks: — · verify: `go test -run Svc -cover ./...`
   - Cover realOSService guard + svcStatusCommand branches.

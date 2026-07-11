@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/inovacc/daemon/internal/serverinfo"
 )
 
 func newMonitorForTest(t *testing.T, spawn func(context.Context, []string) int) *monitor {
@@ -16,6 +18,49 @@ func newMonitorForTest(t *testing.T, spawn func(context.Context, []string) int) 
 	m.sleep = func(time.Duration) {} // no real waiting in tests
 
 	return m
+}
+
+// TestRunMonitorReturnsOnCancelledContext exercises the public RunMonitor entry
+// point (not the internal m.run seam): with an already-cancelled context the loop
+// stops at its top-of-loop guard before spawning any worker, and the deferred
+// cleanup removes the server.json it wrote on startup.
+func TestRunMonitorReturnsOnCancelledContext(t *testing.T) {
+	dir := t.TempDir()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // pre-cancel: the loop must return before the first spawn.
+
+	if err := RunMonitor(ctx, Options{BinaryName: "t", DataDir: dir}); err != nil {
+		t.Fatalf("cancelled context should return nil, got %v", err)
+	}
+	// The monitor writes server.json on startup and removes it via defer on exit.
+	if serverinfo.NewStore(dir).IsRunning() != nil {
+		t.Fatal("server.json must be removed after the monitor stops")
+	}
+}
+
+// TestMonitorStopsWhenContextCancelledDuringCrash covers handleCrash's ctx.Done()
+// branch: a worker crash whose context is cancelled mid-handling stops the monitor
+// cleanly (return nil) instead of restarting or tripping the loop guard.
+func TestMonitorStopsWhenContextCancelledDuringCrash(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	calls := 0
+	m := newMonitorForTest(t, func(context.Context, []string) int {
+		calls++
+
+		cancel() // cancel synchronously so handleCrash sees ctx.Done() ready.
+
+		return ExitError.AsInt()
+	})
+
+	if err := m.run(ctx); err != nil {
+		t.Fatalf("cancellation during crash handling must return nil, got %v", err)
+	}
+
+	if calls != 1 {
+		t.Fatalf("worker should spawn once then stop on cancellation, got %d", calls)
+	}
 }
 
 func TestMonitorAbortsOnCrashLoop(t *testing.T) {
