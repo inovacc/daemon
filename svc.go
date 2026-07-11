@@ -70,6 +70,14 @@ func (p *program) Start(service.Service) error {
 
 // Stop cancels the supervisor context and waits for it to drain, up to stopTimeout,
 // then returns so the OS service manager can terminate the process.
+//
+// The wait is bounded, not a hard join: if the caller-supplied run func
+// (Options.Serve, via RunMonitor) ignores context cancellation, Stop logs a timeout
+// and returns anyway, leaving that goroutine running until the process exits.
+// Consumers MUST make their Serve body context-responsive — return promptly once
+// ctx is Done. Stop deliberately trades a guaranteed, timely return to the service
+// manager for a possible goroutine leak, rather than blocking shutdown indefinitely
+// on a misbehaving worker.
 func (p *program) Stop(service.Service) error {
 	log := p.o.logger().With(slog.String("role", "os-service"))
 	if p.cancel != nil {
