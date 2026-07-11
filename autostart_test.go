@@ -67,6 +67,33 @@ func runAutostart(t *testing.T, o Options, args ...string) (string, error) {
 	return buf.String(), err
 }
 
+func TestValidateServiceName(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		valid bool
+	}{
+		{"daemon", true},
+		{"my-app_1.2", true},
+		{"MyApp", true},
+		{"", false},
+		{"   ", false},
+		{"has space", false},
+		{"semi;colon", false},
+		{`slash\path`, false},
+		{`quote"x`, false},
+		{"amp&y", false},
+	} {
+		err := validateServiceName(tc.name)
+		if tc.valid && err != nil {
+			t.Errorf("validateServiceName(%q) = %v, want nil", tc.name, err)
+		}
+
+		if !tc.valid && err == nil {
+			t.Errorf("validateServiceName(%q) = nil, want error", tc.name)
+		}
+	}
+}
+
 func TestParseMethod(t *testing.T) {
 	for _, tc := range []struct {
 		in   string

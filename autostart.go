@@ -59,6 +59,30 @@ type autostartManager interface {
 // trigger). Tests override it to inject a fake.
 var newAutostartManager = realAutostartManager
 
+// validateServiceName rejects names unsuitable for use as a Windows scheduled-task
+// (/TN) name or a registry Run value: empty/whitespace, or any character outside a
+// conservative safe set (letters, digits, '-', '_', '.'). Defense-in-depth — the
+// exec path already builds arg slices (no shell) and every elevated write is gated
+// by RequirePrivilege, but a malformed name should fail fast rather than create a
+// surprising or unremovable registration.
+func validateServiceName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return fmt.Errorf("daemon: service name must not be empty")
+	}
+
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9',
+			r == '-', r == '_', r == '.':
+			// allowed
+		default:
+			return fmt.Errorf("daemon: service name %q contains invalid character %q (allowed: letters, digits, - _ .)", name, r)
+		}
+	}
+
+	return nil
+}
+
 // parseMethod validates the --method flag value.
 func parseMethod(s string) (autostartMethod, error) {
 	switch autostartMethod(strings.ToLower(strings.TrimSpace(s))) {

@@ -43,6 +43,10 @@ type windowsAutostart struct {
 // realAutostartManager builds the Windows autostart manager, resolving the target
 // command line once from the running executable and the launch argv.
 func realAutostartManager(o Options, launch []string) (autostartManager, error) {
+	if err := validateServiceName(o.ServiceName); err != nil {
+		return nil, err
+	}
+
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("daemon: resolve executable: %w", err)
