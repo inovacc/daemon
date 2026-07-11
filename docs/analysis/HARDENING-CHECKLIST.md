@@ -91,9 +91,10 @@ Legend: `[ ]` unchecked · sev = severity · lev = leverage. See HARDENING-RUNBO
   - blocks: — · unblocks: — · verify: `go vet ./...`
   - Log store.Remove() error as non-fatal warning.
   - DONE 2026-07-11: Stop now logs a Warn (path + err) when server.json removal fails after a successful kill, instead of `_ = store.Remove()`. Still returns nil (process already gone; IsRunning self-heals). Tested deterministically: injected stopProcessFn swaps server.json for a non-empty dir so os.Remove refuses it on every platform, then assert the warning fires via an injected slog handler. Moves Observability dimension 3→4. Race + 3-OS build + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
-- [ ] **H-21** · ARCH-02 · architecture · sev Low · lev 2 · `monitor.go:31`
+- [x] **H-21** · ARCH-02 · architecture · sev Low · lev 2 · `monitor.go:31`
   - blocks: — · unblocks: — · verify: `go build ./...`
   - Move reexecFn into dedicated reexec.go.
+  - DONE 2026-07-11: moved `var reexecFn = reexecSelf` (+ its doc comment) out of monitor.go into a new reexec.go, so all four launch/stop seams follow one pattern (shared var in `<name>.go`, impls in `<name>_<os>.go`). Pure relocation, no behavior change; reexec_test still asserts the default. Race + 3-OS build + vet + lint(0) clean. Commit on harden/cov-01-autostart-windows-seam.
 - [ ] **H-22** · DX-01 · dx · sev Low · lev 2 · `example_test.go:1`
   - blocks: — · unblocks: — · verify: `go test -run Example ./...`
   - Optional autostart Example.

@@ -25,11 +25,6 @@ type monitor struct {
 	sleep func(time.Duration)
 }
 
-// reexecFn is a seam (mirrors spawnDetachedFn / stopProcessFn) overridden in tests;
-// production points at the platform implementation in reexec_unix.go / reexec_windows.go.
-// On success it does not return (the process image is replaced or exits).
-var reexecFn = reexecSelf
-
 func newMonitor(o Options) *monitor {
 	return &monitor{
 		o:     o,
