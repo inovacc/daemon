@@ -15,8 +15,18 @@ import (
 )
 
 func TestChildEnvName(t *testing.T) {
-	if got := childEnvName("logger-demo"); got != "LOGGER_DEMO_DAEMON_CHILD" {
-		t.Errorf("childEnvName = %q", got)
+	got := childEnvName("logger-demo")
+	// Readable sanitized prefix + a hash suffix.
+	if !strings.HasPrefix(got, "LOGGER_DEMO_DAEMON_CHILD_") {
+		t.Errorf("childEnvName = %q, want the sanitized prefix", got)
+	}
+	// Deterministic: same input → same var.
+	if got != childEnvName("logger-demo") {
+		t.Error("childEnvName must be deterministic")
+	}
+	// Collision-free: names that sanitize identically must still differ.
+	if childEnvName("my-app") == childEnvName("my_app") {
+		t.Error("distinct binary names must not share a recursion-guard var")
 	}
 }
 

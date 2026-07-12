@@ -96,10 +96,20 @@ func (s *Store) Remove() error {
 }
 
 // IsRunning reports the live instance, or nil. A record whose PID is no longer
-// alive is treated as stale: the file is removed and nil is returned.
+// alive is treated as stale: the file is removed and nil is returned. A corrupt or
+// otherwise unreadable file (any error other than the expected ErrNoRecord) is also
+// self-healed — removed — so junk left by a crashed writer cannot block the next start.
 func (s *Store) IsRunning() *Info {
 	info, err := s.Read()
-	if err != nil || info == nil {
+	if err != nil {
+		if !errors.Is(err, ErrNoRecord) {
+			_ = s.Remove()
+		}
+
+		return nil
+	}
+
+	if info == nil {
 		return nil
 	}
 

@@ -110,6 +110,24 @@ func TestIsRunningNilWhenNoFile(t *testing.T) {
 	}
 }
 
+func TestIsRunningSelfHealsCorruptFile(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	// A corrupt pid file left by a crashed writer must not wedge IsRunning: it should
+	// report "not running" AND delete the junk so the next start isn't blocked.
+	if err := os.WriteFile(s.Path(), []byte("{not json"), 0o644); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	if got := s.IsRunning(); got != nil {
+		t.Fatalf("IsRunning on a corrupt file should be nil, got %+v", got)
+	}
+
+	if _, err := os.Stat(s.Path()); !os.IsNotExist(err) {
+		t.Fatal("corrupt server.json should be self-healed (removed)")
+	}
+}
+
 func TestReadCorruptJSONReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)

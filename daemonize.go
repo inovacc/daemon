@@ -3,6 +3,7 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"os"
 	"strings"
@@ -34,7 +35,11 @@ var (
 // (write serverinfo). A package var so tests can shrink it; production is 5s.
 var healthWaitTimeout = 5 * time.Second
 
-// childEnvName is the recursion-guard env var, e.g. "MY_APP" -> "MY_APP_DAEMON_CHILD".
+// childEnvName is the recursion-guard env var, e.g. "my-app" -> "MY_APP_DAEMON_CHILD_XXXXXXXX".
+// The uppercased, identifier-sanitized name keeps the var human-readable, and a short hash
+// of the ORIGINAL name disambiguates binaries whose sanitized names would otherwise collide
+// (e.g. "my-app" and "my_app" both sanitize to MY_APP). It is deterministic, so a parent and
+// its child compute the same var from the same BinaryName.
 func childEnvName(binaryName string) string {
 	up := strings.ToUpper(binaryName)
 	up = strings.Map(func(r rune) rune {
@@ -45,7 +50,10 @@ func childEnvName(binaryName string) string {
 		return '_'
 	}, up)
 
-	return up + "_DAEMON_CHILD"
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(binaryName))
+
+	return fmt.Sprintf("%s_DAEMON_CHILD_%08X", up, h.Sum32())
 }
 
 // Start daemonizes: it spawns a detached __monitor process and returns its pid.
