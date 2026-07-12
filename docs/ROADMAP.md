@@ -1,18 +1,18 @@
 # Roadmap
-<!-- rev:003 -->
+<!-- rev:004 -->
 
 ## Current Status
-**Overall Progress:** ~75% — Supervisor, detached lifecycle, OS-service registration, and
-Windows autostart all implemented and unit-tested; full hardening loop landed (maturity stage 4).
-Remaining: optional gRPC daemon path, the weaver/kody migration, and the first tagged release
-(gated on a green CI `main`). Pure library (ADR-0002).
+**Overall Progress:** ~78% — Supervisor, detached lifecycle, OS-service registration, and
+Windows autostart all implemented and tested; hardening loop + two maturation cycles landed
+(maturity stage 4, coverage target met). Remaining: optional gRPC daemon path, the weaver/kody
+migration, and the first tagged release (gated on a green CI `main`). Pure library (ADR-0002).
 
 ## Test Coverage (`go tool cover`)
 | Package | Coverage |
 |---------|----------|
-| `github.com/inovacc/daemon` (root) | 80.6% |
-| `internal/serverinfo` | 68.2% |
-| **Total** | **79.6%** (target 80%) |
+| `github.com/inovacc/daemon` (root) | 80.7% |
+| `internal/serverinfo` | 93.2% |
+| **Total** | **81.7%** (target 80% ✓) |
 
 Run `task test:cover`. Untested paths are tracked in [BACKLOG.md](BACKLOG.md) (COV-02/03/04).
 
@@ -41,5 +41,6 @@ Run `task test:cover`. Untested paths are tracked in [BACKLOG.md](BACKLOG.md) (C
       All 22 checklist items done; maturity re-rated to stage 4 (`docs/analysis/MATURITY.md`).
 - [ ] Fix CI go-version pin (1.21→1.25) → green `main`, then cut the first `v0.x` tag
 - [ ] Port weaver and kody onto the module (behind deprecation dates)
-- [ ] Stress/zombie tests + TestMain hard timeouts
-- [ ] 80%+ coverage, CI green, v1.0.0 release
+- [x] Stress tests (goroutine-leak + sliding-window) + TestMain hard timeout (`b583af4`/`49c2d90`)
+- [x] 80%+ coverage (81.7%); fuzz targets + benchmarks + platform-leaf coverage added
+- [ ] CI green on `main` + v1.0.0 release (gated on a push)

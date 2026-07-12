@@ -20,6 +20,9 @@ current state of `main`/the working branch.
 - Exit-code protocol: `ExitCodeFor` maps `ErrNeedsPrivilege` (even wrapped) to exit `5`.
 - `Options.OnRestart` — optional callback fired on each crash-restart for metrics.
 - Port and `ServiceName` validation at wiring time (`AttachCommands`).
+- Runnable godoc examples for `Start`, `Stop`, and `RunMonitor`.
+- Test depth: a real spawn→crash→restart integration test with a TestMain hard timeout,
+  fuzz targets for the validators, benchmarks, and platform-leaf coverage (total ≥ 80%).
 
 ### Changed
 - Flattened to a pure-library module at the package root; dropped `cmd/` and GoReleaser
