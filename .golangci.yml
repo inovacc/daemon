@@ -83,3 +83,9 @@ linters:
       # deliberately create files/dirs with assorted modes to exercise error paths.
       - path: '_test\.go'
         linters: [gosec]
+      # Some godoc examples illustrate entry points that spawn a detached process
+      # (Start), block until cancelled (RunMonitor), or depend on machine state
+      # (Stop) — they compile and render on pkg.go.dev but cannot assert a
+      # deterministic Output. The runnable examples in the file keep their Output.
+      - path: 'example_test\.go'
+        linters: [testableexamples]
