@@ -51,7 +51,7 @@ func (s *Store) Write(info Info) error {
 		info.StartedAt = time.Now()
 	}
 
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+	if err := os.MkdirAll(s.dir, 0o750); err != nil {
 		return err
 	}
 

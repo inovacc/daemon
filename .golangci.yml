@@ -44,7 +44,6 @@ linters:
     - gocognit
     - godot
     - godox
-    - gosec
     - gosmopolitan
     - intrange
     - ireturn
@@ -64,5 +63,23 @@ linters:
     - depguard
     - dupl
     - goconst
-    - gocyclo
     - whitespace
+
+  settings:
+    # gocyclo re-enabled at a lenient threshold: guards against runaway complexity
+    # without churning the current (flat) code. Ratchet down over time.
+    gocyclo:
+      min-complexity: 15
+
+  exclusions:
+    rules:
+      # G204: this module's purpose is to spawn processes. Every exec launches the
+      # program's OWN executable (self re-exec / worker) or a fixed OS command
+      # (taskkill) via an arg SLICE — never a shell string, never consumer input.
+      # The security audit confirmed no injection surface; gosec cannot see that.
+      - linters: [gosec]
+        text: 'G204'
+      # gosec permission/overflow checks on test fixtures are noise: tests
+      # deliberately create files/dirs with assorted modes to exercise error paths.
+      - path: '_test\.go'
+        linters: [gosec]
