@@ -18,6 +18,8 @@ func reexecSelf(args []string) error {
 	if err != nil {
 		return fmt.Errorf("locate executable: %w", err)
 	}
+
 	argv := append([]string{self}, args...)
+
 	return syscall.Exec(self, argv, os.Environ())
 }

@@ -14,10 +14,13 @@ func spawnDetached(exe string, args, env []string) (int, error) {
 	cmd.Env = env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+
 	if err := cmd.Start(); err != nil {
 		return 0, err
 	}
+
 	pid := cmd.Process.Pid
 	_ = cmd.Process.Release()
+
 	return pid, nil
 }
