@@ -1,5 +1,5 @@
 # Backlog
-<!-- rev:004 -->
+<!-- rev:005 -->
 
 ## Priority Levels
 | Priority | Timeline |
@@ -10,13 +10,12 @@
 
 ## Items
 
-_All non-blocked items are resolved. The remaining three are blocked on external
-prerequisites (a push, the kody source, or the weaver/kody repos)._
+_The first release (v0.1.0) is out and CI is green on `main`. The two remaining items are
+blocked on external prerequisites (the kody source, or the weaver/kody repos)._
 
-- **Priority:** P2 — **Category:** Release — **Effort:** Small — **[BLOCKED: needs a push]**
-  - Cut the first `v0.x.0` tag + add a `release.yml`; pin CI actions to SHAs. Gated on a green
-    CI `main` (the go-version fix must land upstream first). Converts the two D-grade maturity
-    dimensions. See `docs/analysis/MATURITY.md`.
+- **Priority:** P2 — **Category:** Release — **Effort:** Small
+  - Add a `release.yml` (tag-triggered) and pin CI actions to SHAs, now that CI is green and
+    v0.1.0 is tagged.
 
 - **Priority:** P2 — **Category:** Feature — **Effort:** Large — **[BLOCKED: needs kody source + spec]**
   - Optional gRPC daemon path (server + IdleTracker + discovery) lifted from kody, behind an

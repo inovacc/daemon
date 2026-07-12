@@ -118,7 +118,12 @@ A second /steps:next cycle (2026-07-12) then cleared the rest of the actionable 
 - **Testing** real spawn→crash→restart integration test + TestMain hard timeout
   (`49c2d90`) → realSpawn 0%→81.8%, **total coverage 79.6%** (root 80.6%).
 
-**Still open (all blocked on external prerequisites):** cut the first `v0.x` tag (needs a
-green CI push — the release-chain payoff), the weaver/kody migration (external repos), and
-the opt-in gRPC daemon path (needs the kody source + a design spec).
+**Release chain unblocked (2026-07-12):** `main` was fast-forwarded to the hardened HEAD and
+CI is now **green** across the windows/linux/darwin matrix + lint gate (the go-version pin,
+cross-OS lint, and a bash-shell fix all landed). **v0.1.0** is tagged (`ca8adc5`). This clears
+the two D-grade dimensions — **CI/CD** (green default branch, matrix + lint gate) and
+**Stability/Release** (a tagged, pinnable release) — lifting them to stage 4.
+
+**Still open (blocked on external prerequisites):** the weaver/kody migration (external repos)
+and the opt-in gRPC daemon path (needs the kody source + a design spec).
 

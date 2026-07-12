@@ -6,8 +6,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-No release has been tagged yet; the module is pre-1.0. Everything below is the
-current state of `main`/the working branch.
+_Nothing yet._
+
+## [0.1.0] - 2026-07-12
+
+First tagged release. CI green on windows/linux/darwin; coverage 81.7%.
 
 ### Added
 - Monitor→worker supervisor with a sliding-window fork-loop guard and exponential backoff.

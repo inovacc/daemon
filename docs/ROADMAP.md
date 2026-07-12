@@ -43,4 +43,5 @@ Run `task test:cover`. Untested paths are tracked in [BACKLOG.md](BACKLOG.md) (C
 - [ ] Port weaver and kody onto the module (behind deprecation dates)
 - [x] Stress tests (goroutine-leak + sliding-window) + TestMain hard timeout (`b583af4`/`49c2d90`)
 - [x] 80%+ coverage (81.7%); fuzz targets + benchmarks + platform-leaf coverage added
-- [ ] CI green on `main` + v1.0.0 release (gated on a push)
+- [x] CI green on `main` (3-OS matrix + lint gate) and first release **v0.1.0** tagged (`ca8adc5`)
+- [ ] v1.0.0 release (API freeze + weaver/kody migration)
