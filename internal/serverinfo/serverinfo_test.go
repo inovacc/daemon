@@ -183,6 +183,20 @@ func TestReadSurfacesNonNotExistError(t *testing.T) {
 	}
 }
 
+func TestWriteSurfacesMkdirError(t *testing.T) {
+	dir := t.TempDir()
+	// Put a FILE where the store's parent dir would be, so MkdirAll(s.dir) fails.
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+
+	s := NewStore(filepath.Join(blocker, "nested"))
+	if err := s.Write(Info{PID: 1}); err == nil {
+		t.Fatal("Write must fail when the data dir cannot be created")
+	}
+}
+
 func TestWriteSurfacesWriteError(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
