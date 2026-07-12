@@ -14,11 +14,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// AttachCommands wires the public `service` command and the hidden `__monitor` /
-// `__worker` supervisor commands onto root. Options.Serve (the worker body) is required.
+// AttachCommands wires the daemon's command groups onto root: the public `service`
+// command (with start/stop/status subcommands), the `svc` OS-service group
+// (install/uninstall/start/stop/restart/status), the `autostart` launch-at-logon group
+// (enable/disable/status), and the hidden `__monitor` / `__worker` supervisor commands.
+// Options.Serve (the worker body) is required; ports and ServiceName are validated here.
 //
-// Spawn chain: `service` (or `service start`, future) runs the monitor; the monitor
-// spawns `__worker --port N --grpc-port N`; the worker runs Options.Serve.
+// Spawn chain: `service` (or `service start`) runs the monitor; the monitor spawns
+// `__worker --port N --grpc-port N`; the worker runs Options.Serve.
 func AttachCommands(root *cobra.Command, opts Options) error {
 	if opts.Serve == nil {
 		return errors.New("daemon: Options.Serve is required")
