@@ -306,6 +306,20 @@ func TestRealOSServiceEmptyServiceName(t *testing.T) {
 	}
 }
 
+// TestRealOSServiceRejectsBadName is defense-in-depth: even reached directly (not
+// via AttachCommands' validate), realOSService must reject a name with characters
+// unsafe as a task/registry/service identifier.
+func TestRealOSServiceRejectsBadName(t *testing.T) {
+	s, err := realOSService(Options{ServiceName: "bad name!", BinaryName: "t"})
+	if err == nil {
+		t.Fatal("realOSService must reject a ServiceName with invalid characters")
+	}
+
+	if s != nil {
+		t.Fatalf("realOSService must return nil on error, got %v", s)
+	}
+}
+
 // TestRealOSServiceBuildsService covers realOSService's success path (past the
 // empty-name guard): with a valid ServiceName it constructs a kardianos-backed
 // handle. Building the handle does not touch the OS service manager.

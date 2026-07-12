@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -59,6 +60,37 @@ type Options struct {
 	// Logger receives structured lifecycle events (startup, restart, crash,
 	// shutdown, ...). When nil, slog.Default() is used.
 	Logger *slog.Logger
+}
+
+// validatePort rejects a port outside the TCP range. Zero is allowed: it is the
+// "unset" sentinel that withDefaults fills with the compiled-in default.
+func validatePort(name string, port int) error {
+	if port < 0 || port > 65535 {
+		return fmt.Errorf("daemon: %s %d out of range (want 0-65535)", name, port)
+	}
+
+	return nil
+}
+
+// validate checks consumer-supplied fields that reach the OS (ports used for bind,
+// ServiceName used as a task/registry/service name). It is called by AttachCommands
+// after withDefaults so bad input fails fast at wiring time rather than at spawn.
+func (o Options) validate() error {
+	if err := validatePort("HTTPPort", o.HTTPPort); err != nil {
+		return err
+	}
+
+	if err := validatePort("GRPCPort", o.GRPCPort); err != nil {
+		return err
+	}
+
+	if o.ServiceName != "" {
+		if err := validateServiceName(o.ServiceName); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // logger returns the configured logger, or slog.Default() when none is set.

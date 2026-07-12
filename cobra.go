@@ -25,6 +25,9 @@ func AttachCommands(root *cobra.Command, opts Options) error {
 	}
 
 	o := opts.withDefaults()
+	if err := o.validate(); err != nil {
+		return err
+	}
 
 	service := &cobra.Command{
 		Use:   "service",

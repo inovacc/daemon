@@ -111,6 +111,10 @@ func realOSService(o Options) (osService, error) {
 		return nil, fmt.Errorf("daemon: cannot manage OS service: ServiceName is empty (set Options.BinaryName or Options.ServiceName)")
 	}
 
+	if err := validateServiceName(o.ServiceName); err != nil {
+		return nil, err
+	}
+
 	cfg := &service.Config{
 		Name:        o.ServiceName,
 		DisplayName: o.ServiceName,
