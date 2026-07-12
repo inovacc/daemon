@@ -150,6 +150,11 @@ func (m *monitor) handleCrash(ctx context.Context, log *slog.Logger, code ExitSt
 
 	*attempt++
 
+	// Optional observability hook: let the consumer count restarts / export a metric.
+	if m.o.OnRestart != nil {
+		m.o.OnRestart(code, *attempt)
+	}
+
 	return false, nil
 }
 

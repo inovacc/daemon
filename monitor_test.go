@@ -63,6 +63,52 @@ func TestMonitorStopsWhenContextCancelledDuringCrash(t *testing.T) {
 	}
 }
 
+func TestMonitorOnRestartHookFires(t *testing.T) {
+	var (
+		calls      int
+		lastCode   ExitStatus
+		lastAttempt int
+	)
+
+	o := Options{BinaryName: "t", DataDir: t.TempDir()}.withDefaults()
+	o.OnRestart = func(code ExitStatus, attempt int) {
+		calls++
+		lastCode = code
+		lastAttempt = attempt
+	}
+
+	m := newMonitor(o)
+	m.sleep = func(time.Duration) {}
+
+	const crashes = 2
+
+	n := 0
+	m.spawn = func(context.Context, []string) int {
+		n++
+		if n <= crashes {
+			return ExitError.AsInt() // crash twice, then exit clean
+		}
+
+		return ExitSuccess.AsInt()
+	}
+
+	if err := m.run(context.Background()); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if calls != crashes {
+		t.Fatalf("OnRestart fired %d times, want %d", calls, crashes)
+	}
+
+	if lastCode != ExitError {
+		t.Fatalf("OnRestart code = %v, want ExitError", lastCode)
+	}
+
+	if lastAttempt != crashes {
+		t.Fatalf("OnRestart last attempt = %d, want %d", lastAttempt, crashes)
+	}
+}
+
 func TestMonitorAbortsOnCrashLoop(t *testing.T) {
 	calls := 0
 	m := newMonitorForTest(t, func(context.Context, []string) int {

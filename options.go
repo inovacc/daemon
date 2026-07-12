@@ -57,6 +57,12 @@ type Options struct {
 	// Logger receives structured lifecycle events (startup, restart, crash,
 	// shutdown, ...). When nil, slog.Default() is used.
 	Logger *slog.Logger
+
+	// OnRestart, when set, is called by the monitor each time it restarts the worker
+	// after a crash (or a failed upgrade re-exec), with the triggering exit code and the
+	// consecutive-restart attempt count. It runs in the monitor process on the monitor
+	// goroutine — keep it cheap and non-blocking (e.g. bump a metric). Optional.
+	OnRestart func(code ExitStatus, attempt int)
 }
 
 // validatePort rejects a port outside the TCP range. Zero is allowed: it is the
