@@ -43,9 +43,6 @@ type Options struct {
 	// portsExplicit marks that the user overrode the ports (so the monitor forwards them).
 	portsExplicit bool
 
-	// IdleTimeout, when > 0, shuts the worker down after inactivity (gRPC path).
-	IdleTimeout time.Duration
-
 	// GuardSize / GuardWindow tune the fork-loop guard (abort after N restarts in window).
 	GuardSize   int
 	GuardWindow time.Duration
