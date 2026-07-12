@@ -94,12 +94,19 @@ func (m *monitor) run(ctx context.Context) error {
 			if err := reexecFn(os.Args[1:]); err != nil {
 				// On Unix syscall.Exec replaces this image and never returns; on
 				// Windows reexecSelf exits the process. Reaching here means re-exec
-				// FAILED — degrade to the existing restart so we never kill the service.
+				// FAILED — degrade to a restart so we never kill the service, but treat
+				// it as a CRASH (guard + backoff), not an intentional ExitRestart. A
+				// worker that keeps requesting an un-performable upgrade must back off
+				// and ultimately trip the fork-loop guard, not busy-loop with no delay.
 				log.Error("re-exec failed; falling back to restart", slog.Any("err", err))
+
+				if stop, err := m.handleCrash(ctx, log, code, &attempt); stop {
+					return err
+				}
+
+				continue
 			}
-
-			attempt = 0
-
+			// Unreachable: a successful re-exec replaced/exited the process above.
 			continue
 		// ExitError, ExitNeedsPrivilege, and any unknown code are all treated as a crash:
 		// the worker is restarted subject to the fork-loop guard and backoff.

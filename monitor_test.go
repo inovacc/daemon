@@ -192,3 +192,31 @@ func TestUpgradeReexecErrorDegradesToRestart(t *testing.T) {
 		t.Fatalf("expected restart after failed re-exec (2 spawns), got %d", calls)
 	}
 }
+
+// TestUpgradePersistentReexecFailureTripsGuard pins the busy-loop fix: a worker that
+// keeps requesting an upgrade whose re-exec always fails must be treated as a crash
+// loop — backing off and tripping the fork-loop guard after GuardSize spawns — rather
+// than looping forever with attempt reset to 0 and no delay.
+func TestUpgradePersistentReexecFailureTripsGuard(t *testing.T) {
+	orig := reexecFn
+
+	t.Cleanup(func() { reexecFn = orig })
+
+	reexecFn = func([]string) error { return errors.New("boom") }
+
+	calls := 0
+	m := newMonitorForTest(t, func(context.Context, []string) int {
+		calls++
+
+		return ExitUpgrade.AsInt() // always upgrade; reexec always fails
+	})
+
+	err := m.run(context.Background())
+	if err == nil {
+		t.Fatal("a persistently failing upgrade must trip the guard, not busy-loop forever")
+	}
+
+	if calls != m.o.GuardSize {
+		t.Fatalf("worker should spawn exactly GuardSize=%d times before abort, got %d", m.o.GuardSize, calls)
+	}
+}
