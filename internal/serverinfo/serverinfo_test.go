@@ -4,8 +4,29 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
+
+func TestWriteUsesOwnerOnlyPerms(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows governs access via ACLs, not unix mode bits")
+	}
+
+	s := NewStore(t.TempDir())
+	if err := s.Write(Info{PID: 1}); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+
+	fi, err := os.Stat(s.Path())
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+
+	if perm := fi.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("server.json perm = %o, want 600", perm)
+	}
+}
 
 func TestWriteReadRoundTrip(t *testing.T) {
 	dir := t.TempDir()

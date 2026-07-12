@@ -60,7 +60,10 @@ func (s *Store) Write(info Info) error {
 		return err
 	}
 
-	return os.WriteFile(s.Path(), data, 0o644)
+	// 0600 (owner-only): the pid file holds no secrets, but there is no reason for it
+	// to be world-readable. Windows ignores the mode bits (ACL-governed) — this hardens
+	// the unix case as defense-in-depth.
+	return os.WriteFile(s.Path(), data, 0o600)
 }
 
 // Read returns the persisted info, or ErrNoRecord when the file does not exist.
