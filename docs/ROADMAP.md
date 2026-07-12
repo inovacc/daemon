@@ -1,5 +1,5 @@
 # Roadmap
-<!-- rev:002 -->
+<!-- rev:003 -->
 
 ## Current Status
 **Overall Progress:** ~75% — Supervisor, detached lifecycle, OS-service registration, and
@@ -10,9 +10,9 @@ Remaining: optional gRPC daemon path, the weaver/kody migration, and the first t
 ## Test Coverage (`go tool cover`)
 | Package | Coverage |
 |---------|----------|
-| `github.com/inovacc/daemon` (root) | 78.0% |
-| `internal/serverinfo` | 60.0% |
-| **Total** | **76.7%** (target 80%) |
+| `github.com/inovacc/daemon` (root) | 80.6% |
+| `internal/serverinfo` | 68.2% |
+| **Total** | **79.6%** (target 80%) |
 
 Run `task test:cover`. Untested paths are tracked in [BACKLOG.md](BACKLOG.md) (COV-02/03/04).
 
@@ -32,7 +32,7 @@ Run `task test:cover`. Untested paths are tracked in [BACKLOG.md](BACKLOG.md) (C
 - [x] kardianos/service install/uninstall integration (`svc` group)
 - [x] Windows launch-at-logon (registry Run key / Task Scheduler) + `svc install --autostart` combined trigger
 - [ ] gRPC daemon path (server + IdleTracker + discovery) lifted from kody
-- [ ] Integration tests: real worker spawn, crash→restart, TestMain hard timeout
+- [x] Integration tests: real worker spawn, crash→restart, TestMain hard timeout (`49c2d90`)
 
 ### Phase 3: Polish & Release [IN PROGRESS]
 - [x] Hardening pass — Phase 1 (Stabilize): coverage seams (H-01), ports contract (H-02),

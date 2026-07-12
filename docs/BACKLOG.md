@@ -1,5 +1,5 @@
 # Backlog
-<!-- rev:003 -->
+<!-- rev:004 -->
 
 ## Priority Levels
 | Priority | Timeline |
@@ -9,6 +9,9 @@
 | P3 | Future |
 
 ## Items
+
+_All non-blocked items are resolved. The remaining three are blocked on external
+prerequisites (a push, the kody source, or the weaver/kody repos)._
 
 - **Priority:** P2 — **Category:** Release — **Effort:** Small — **[BLOCKED: needs a push]**
   - Cut the first `v0.x.0` tag + add a `release.yml`; pin CI actions to SHAs. Gated on a green
@@ -24,19 +27,11 @@
   - DEPRECATION: migrate weaver + kody to consume this module and mark their in-tree
     supervisor/serverinfo copies `Deprecated:` with a ≥30-day removal date.
 
-- **Priority:** P2 — **Category:** Observability — **Effort:** Medium
-  - Expose restart/crash counters (a Stats hook) — observability today is log-only, no metrics.
-
-- **Priority:** P2 — **Category:** Test — **Effort:** Medium
-  - Integration test: real worker spawn → crash → restart, with a TestMain hard timeout so a
-    hung supervisor can't wedge CI. (ROADMAP Phase 2/3.)
-
-- **Priority:** P3 — **Category:** Code-Quality — **Effort:** Medium
-  - Re-enable gosec + a complexity linter (gocyclo/funlen at a lenient threshold) — the green
-    golangci-lint run does not currently certify security statics or bounded complexity.
-
 ## Resolved
 
+- **P2 · Observability** — restart/crash counters. ✅ 2026-07-12, `2ffb42d` — added the optional `Options.OnRestart` hook.
+- **P2 · Test** — real spawn→crash→restart integration test + TestMain hard timeout. ✅ 2026-07-12, `49c2d90` — realSpawn 0%→81.8%, total →79.6%.
+- **P3 · Code-Quality** — re-enable gosec + a complexity linter. ✅ 2026-07-12, `af65e16` — gosec + gocyclo on; dir 0750, pid overflow guard; by-design/test findings excluded.
 - **P1 · CI/Release** — Test job red on `main` (go-version 1.21 vs go.mod 1.25). ✅ 2026-07-12, `e6a71cf` — switched both workflows to `go-version-file: go.mod` (drift-proof). *Green verification needs a push.*
 - **P2 · CI/Test** — no lint/vet gate; tests ubuntu-only. ✅ 2026-07-12, `e6a71cf` — added win/macOS test matrix + go vet + golangci-lint job.
 - **P1 · CI/Lint** — golangci-lint red (7 issues). ✅ 2026-07-11, `7b04772` (H-08/H-09).

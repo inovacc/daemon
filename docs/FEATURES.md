@@ -16,9 +16,10 @@
   restart/upgrade codes drive the supervisor.
 - **Input validation** — ports and `ServiceName` validated at wiring time (`AttachCommands`).
 - **Structured logging** — slog throughout, with an injectable `Options.Logger`.
+- **Restart observability hook** — optional `Options.OnRestart(code, attempt)` callback
+  fired on each crash-restart, so consumers can export metrics.
 
 ## Proposed
 
 - **Opt-in gRPC daemon path** — server + idle auto-shutdown (reintroduces `IdleTimeout`,
   wired) + discovery/auto-start, lifted from kody. (ROADMAP Phase 2 / BACKLOG P2.)
-- **Restart/crash counters** — a `Stats` hook exposing supervisor metrics beyond logs.

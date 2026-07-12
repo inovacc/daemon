@@ -107,7 +107,18 @@ Most of the route was executed the same day:
 - **H2** serverinfo error branches covered → pkg 67.5%, total 78.0% (`d8c39a5`).
 - **H5** corrupt-JSON self-heal + `childEnvName` collision fixed (`7bb8627`). *Graceful Windows stop skipped — force-kill is correct for no-window detached processes.*
 
-**Still open:** cut the first `v0.x` tag (needs a green CI push — the release-chain payoff),
-weaver/kody migration, the opt-in gRPC daemon path (needs the kody source + a design spec),
-re-enabling gosec/complexity linters (**H4**), and the doc/naming polish (**M3/M4**).
+A second /steps:next cycle (2026-07-12) then cleared the rest of the actionable route:
+
+- **H4** gosec + gocyclo re-enabled; real findings fixed (dir 0750, pid overflow guard),
+  by-design G204 + test noise excluded (`af65e16`).
+- **M3** AttachCommands/doc.go godoc corrected; FEATURES/BUGS filled (`c7e22f7`).
+- **M4** `autostart_other.go` → `autostart_unix.go` (`eec4997`/`bb4f0d5`).
+- **Security** `server.json` 0644 → 0600 (`3ed9565`).
+- **Operational** `Options.OnRestart` metrics hook (`2ffb42d`).
+- **Testing** real spawn→crash→restart integration test + TestMain hard timeout
+  (`49c2d90`) → realSpawn 0%→81.8%, **total coverage 79.6%** (root 80.6%).
+
+**Still open (all blocked on external prerequisites):** cut the first `v0.x` tag (needs a
+green CI push — the release-chain payoff), the weaver/kody migration (external repos), and
+the opt-in gRPC daemon path (needs the kody source + a design spec).
 
