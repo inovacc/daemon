@@ -13,6 +13,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # Use bash on every OS so the test command parses identically; the default
+        # PowerShell on windows-latest mis-splits `-coverprofile=coverage.out ./...`.
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
