@@ -6,7 +6,7 @@ require github.com/spf13/cobra v1.10.2
 
 require (
 	github.com/kardianos/service v1.2.2
-	golang.org/x/sys v0.44.0
+	golang.org/x/sys v0.47.0
 )
 
 require (
