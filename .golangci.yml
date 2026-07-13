@@ -3,7 +3,10 @@
 version: "2"
 
 run:
-  timeout: 2m
+  # 5m, not 2m: a WARM run takes ~30s, but a COLD one (fresh cache, e.g. right after a
+  # dependency bump) has to analyze everything and can exceed 2m with gosec enabled —
+  # which would fail CI spuriously on any cache miss.
+  timeout: 5m
 
 linters:
   default: all
