@@ -1,5 +1,5 @@
 # daemon
-<!-- rev:003 -->
+<!-- rev:004 -->
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/inovacc/daemon.svg)](https://pkg.go.dev/github.com/inovacc/daemon)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/inovacc/daemon)](go.mod)
@@ -129,6 +129,54 @@ daemon.Options{
 	StopTimeout: 30 * time.Second,
 }
 ```
+
+### Restart guard: circuit breaker + backoff
+
+The monitor protects against fork/spawn loop hell with two composable
+primitives, both exported so you can also use them standalone in your own
+supervision code:
+
+- **`Breaker`** — a sliding-window circuit breaker. Once `MaxRestarts` crash
+  events land inside the trailing `Window`, it trips to `BreakerOpenTerminal`
+  and stays tripped for the process's lifetime (no half-open / auto-reset —
+  a process crash-looping that fast should not silently keep retrying).
+- **`Backoff`** — jittered exponential backoff: `delay = min(Base *
+  Multiplier^attempt, Cap)`, optionally randomized by `±Jitter` (a fraction
+  in `[0, 1)`).
+
+`Options.GuardSize` / `Options.GuardWindow` (the pre-existing fields) still
+work exactly as before and map onto `BreakerConfig{MaxRestarts: GuardSize,
+Window: GuardWindow}`. For richer control, set the new additive fields:
+
+```go
+breakerCfg := daemon.BreakerConfig{MaxRestarts: 8, Window: 2 * time.Minute}
+backoffCfg := daemon.BackoffConfig{
+	Base:       500 * time.Millisecond,
+	Cap:        30 * time.Second,
+	Multiplier: 2.0,
+	Jitter:     0.25, // ±25%, avoids restart-storm thundering herds
+}
+
+daemon.Options{
+	// ... BinaryName, Serve, etc.
+	Breaker: &breakerCfg,
+	Backoff: &backoffCfg,
+}
+```
+
+Either pointer may be set independently; any zero-valued field on a set
+`BreakerConfig`/`BackoffConfig` falls back to the corresponding
+`GuardSize`/`GuardWindow` value (for `Breaker`) or to the legacy default
+curve (for `Backoff`). When both `Breaker` and `Backoff` are left `nil`
+(the default), the restart guard behaves **exactly** as it did before this
+primitive existed: a deterministic, zero-jitter `1s, 2s, 4s, ... capped at
+60s` backoff curve and a `GuardSize`-events-in-`GuardWindow` trip point — no
+behavior change for existing consumers.
+
+`Breaker` and `Backoff` originated in [`slonik`](https://github.com/inovacc/slonik)
+(a sibling project's managed-Postgres supervisor), which built them with zero
+Postgres coupling; they were ported here as generic, first-class daemon
+primitives.
 
 ### Routing supervisor-command exit codes (IMPORTANT)
 

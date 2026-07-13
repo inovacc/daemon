@@ -8,6 +8,56 @@ All notable changes to this project are documented here. The format is based on
 
 _Nothing yet._
 
+## [0.3.0] - 2026-07-13
+
+### Added
+- **`Breaker` / `BreakerConfig`** (`breaker.go`) — a general-purpose,
+  first-class exported sliding-window circuit breaker: once `MaxRestarts`
+  events land inside the trailing `Window` it trips to `BreakerOpenTerminal`
+  and stays tripped for the process's lifetime. Thread-safe.
+- **`Backoff` / `BackoffConfig`** (`backoff.go`) — a general-purpose,
+  first-class exported jittered exponential backoff: `delay = min(Base *
+  Multiplier^attempt, Cap)`, randomized by `±Jitter`.
+- **`Options.Breaker *BreakerConfig`** / **`Options.Backoff
+  *BackoffConfig`** — additive Options fields letting a consumer opt into
+  the richer Breaker/Backoff configuration (e.g. non-zero jitter, a
+  different multiplier) instead of the legacy `GuardSize`/`GuardWindow`
+  pair. Both types originated in [`slonik`](https://github.com/inovacc/slonik)
+  (a sibling project's managed-Postgres supervisor), which built them with
+  zero Postgres coupling; they are ported here, adapted, and re-tested as
+  daemon-native primitives.
+
+### Changed
+- The monitor's restart loop (`monitor.go`'s `handleCrash`, via
+  `restartGuard`) is now implemented **on top of** `Breaker` + `Backoff`
+  instead of the old ad-hoc `restartGuard.isLoop`/`backoff` math. The
+  `restartGuard` type itself, and its package-private `isLoop`/`backoff`
+  methods, are unchanged in signature and are kept as a thin adapter — this
+  refactor is implementation-internal.
+
+### Back-compat (IMPORTANT for existing consumers, e.g. `indexer`)
+- `Options.GuardSize` / `Options.GuardWindow` are **unchanged** — same
+  names, same types, same defaults (`4` restarts / `60s` window), same
+  trip semantics. When `Options.Breaker` is left `nil` (the default), the
+  monitor derives `BreakerConfig{MaxRestarts: GuardSize, Window:
+  GuardWindow}` from them exactly as the old `restartGuard` did.
+- The default restart-delay curve is **unchanged**: when `Options.Backoff`
+  is left `nil` (the default), the monitor uses a deterministic,
+  zero-jitter `1s, 2s, 4s, 8s, ... capped at 60s` curve — bit-for-bit
+  identical to the old `restartGuard.backoff` formula for every attempt
+  value. No existing consumer observes a different restart delay or a
+  different trip point unless it explicitly sets the new `Options.Breaker`
+  / `Options.Backoff` fields.
+- One micro-semantic note for anyone driving `Breaker`/`restartGuard`
+  directly at exact window-boundary timestamps: the old ad-hoc guard kept
+  an event only if it was *strictly after* `now-window` (`t.After(cutoff)`);
+  `Breaker` prunes an event only if it is *strictly before* `now-window`
+  (`t.Before(cutoff)`), i.e. an event landing exactly on the boundary is now
+  kept instead of dropped. This is a one-nanosecond edge case that does not
+  affect any existing test or any realistic crash-timing scenario (restart
+  timestamps are never exactly `window` apart to sub-nanosecond precision in
+  practice).
+
 ## [0.2.0] - 2026-07-13
 
 Fixes six defects and adds three additive capabilities found integrating this
