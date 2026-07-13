@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Verify
+        run: |
+          go build ./...
+          go test ./...
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # --verify-tag ensures the pushed tag exists; notes are generated from the
+        # commit history. This is a pure library, so there are no binary assets.
+        run: gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes
