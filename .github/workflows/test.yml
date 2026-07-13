@@ -13,6 +13,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # `secrets` is not available in a step-level `if`, so surface its presence here.
+    env:
+      HAS_CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN != '' }}
     defaults:
       run:
         # Use bash on every OS so the test command parses identically; the default
@@ -29,13 +32,22 @@ jobs:
       - name: Test
         run: go test -race -coverprofile=coverage.out ./...
 
-      - name: Upload coverage
+      - name: Coverage summary
         if: matrix.os == 'ubuntu-latest'
+        run: |
+          echo '### Coverage' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          go tool cover -func=coverage.out | tail -n 1 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # Only runs once a CODECOV_TOKEN secret exists. Codecov rejects tokenless
+      # uploads ("Token required - not valid tokenless upload"), so without the
+      # secret this step would fail on every run for no benefit; skip it instead.
+      - name: Upload coverage
+        if: matrix.os == 'ubuntu-latest' && env.HAS_CODECOV_TOKEN == 'true'
         uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
         with:
           files: ./coverage.out
-          # Uses the secret if the repo has one configured; falls back to the
-          # tokenless public path otherwise. Never fail the build on an upload error.
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
@@ -56,3 +68,21 @@ jobs:
         uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
         with:
           version: v2.8.0
+
+  vuln:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: 'go.mod'
+
+      # Installed rather than run via an action to keep the third-party action
+      # surface small. govulncheck fetches the vulnerability DB at run time and
+      # reports only vulns actually reachable from this module's code.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...

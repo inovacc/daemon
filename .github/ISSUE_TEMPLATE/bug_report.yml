@@ -1,0 +1,59 @@
+name: Bug report
+description: Report a defect in the daemon library
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do **not** report security vulnerabilities here — follow
+        [SECURITY.md](https://github.com/inovacc/daemon/blob/main/SECURITY.md)
+        and open a private advisory instead.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Module version or commit.
+      placeholder: v0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Windows, Linux, macOS, Other]
+    validations:
+      required: true
+
+  - type: input
+    id: goversion
+    attributes:
+      label: Go version
+      placeholder: go1.25.0 windows/amd64
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: >
+        Include which role/command was involved (`service start`, `service stop`,
+        `svc install`, `autostart enable`, the hidden `__monitor` / `__worker`)
+        and any logs.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Minimal `daemon.Options{...}` wiring and the steps to reproduce.

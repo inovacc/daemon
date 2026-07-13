@@ -1,0 +1,21 @@
+version: 2
+
+updates:
+  # Go module dependencies.
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+
+  # GitHub Actions. Required: this repo pins actions to commit SHAs, so without
+  # dependabot those pins silently rot (no security/bugfix updates).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci(actions)"

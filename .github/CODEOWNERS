@@ -1,0 +1,10 @@
+# Default owner for everything in this repository.
+*                       @dyammarcano
+
+# Security- and privilege-sensitive surfaces: always route for review.
+/privilege.go           @dyammarcano
+/elevate_*.go           @dyammarcano
+/autostart*.go          @dyammarcano
+/svc.go                 @dyammarcano
+/SECURITY.md            @dyammarcano
+/.github/workflows/     @dyammarcano
