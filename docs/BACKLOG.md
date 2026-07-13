@@ -1,5 +1,5 @@
 # Backlog
-<!-- rev:006 -->
+<!-- rev:007 -->
 
 ## Priority Levels
 | Priority | Timeline |
@@ -10,9 +10,14 @@
 
 ## Items
 
-_v0.1.0 is released, CI is green on `main`, and release automation is in place. The only
-remaining items are blocked on external prerequisites (the kody source, or the weaver/kody
-repos)._
+_v0.1.0 is released and CI is green on `main` (3-OS matrix + lint + govulncheck gates).
+Everything else is either a dependabot PR awaiting review or blocked on external repos._
+
+- **Priority:** P2 — **Category:** Deps — **Effort:** Medium
+  - Review + merge the 6 dependabot PRs opened 2026-07-12. Four are **major** action bumps
+    (checkout v4→v7, setup-go v5→v6, codecov v5→v7, golangci-lint-action v8→v9) that need CI
+    verification before merge; two are Go deps (`x/sys` 0.44→0.47, `kardianos/service`
+    1.2.2→1.3.0). Merge the Go deps first, then the actions one at a time.
 
 - **Priority:** P2 — **Category:** Feature — **Effort:** Large — **[BLOCKED: needs kody source + spec]**
   - Optional gRPC daemon path (server + IdleTracker + discovery) lifted from kody, behind an
@@ -25,6 +30,7 @@ repos)._
 
 ## Resolved
 
+- **P2 · Security/CI** — govulncheck was local-only; repo lacked dependabot + templates. ✅ 2026-07-12, `401696f` — govulncheck is now a CI gate, dependabot covers gomod + github-actions (required, since actions are SHA-pinned), added issue/PR templates + CODEOWNERS. Also fixed the codecov step, which had been **failing silently on every run** ("Token required - not valid tokenless upload"): it now prints coverage to the CI summary and only uploads when a `CODECOV_TOKEN` secret exists.
 - **P2 · Release** — release automation. ✅ 2026-07-12, `6b6e9a2` — tag-triggered `release.yml` + CI actions pinned to SHAs + codecov hardened. v0.1.0 GitHub Release published.
 - **P2 · Observability** — restart/crash counters. ✅ 2026-07-12, `2ffb42d` — added the optional `Options.OnRestart` hook.
 - **P2 · Test** — real spawn→crash→restart integration test + TestMain hard timeout. ✅ 2026-07-12, `49c2d90` — realSpawn 0%→81.8%, total →79.6%.
