@@ -35,13 +35,20 @@ func AttachCommands(root *cobra.Command, opts Options) error {
 	service := &cobra.Command{
 		Use:   "service",
 		Short: fmt.Sprintf("Run the %s service (monitor supervises the worker)", o.BinaryName),
-		RunE:  func(cmd *cobra.Command, _ []string) error { return RunMonitor(cmd.Context(), o) },
+		// NoArgs (F2): without an Args validator, Cobra accepts arbitrary trailing
+		// positional args and RunE still fires — so a typo'd `service restart` or
+		// `service bogus` silently STARTS the daemon (RunMonitor) instead of erroring.
+		// Subcommands like `start`/`stop`/`status` are matched by Cobra before Args is
+		// even consulted, so this only rejects genuinely unknown/extra args.
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error { return RunMonitor(cmd.Context(), o) },
 	}
 	service.AddCommand(statusCommand(o), startCommand(o), stopCommand(o))
 
 	monitor := &cobra.Command{
 		Use:    o.MonitorCmd,
 		Hidden: true,
+		Args:   cobra.NoArgs,
 		RunE:   func(cmd *cobra.Command, _ []string) error { return RunMonitor(cmd.Context(), o) },
 	}
 
@@ -50,6 +57,7 @@ func AttachCommands(root *cobra.Command, opts Options) error {
 	worker := &cobra.Command{
 		Use:    o.WorkerCmd,
 		Hidden: true,
+		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			wo := o
 			wo.HTTPPort, wo.GRPCPort = httpPort, grpcPort
@@ -66,12 +74,20 @@ func AttachCommands(root *cobra.Command, opts Options) error {
 }
 
 // RunWorker runs the worker body (Options.Serve) with a signal-cancelled context.
+//
+// The context is also cancelled by a graceful-shutdown request from the monitor
+// (F4): watchGracefulShutdown listens for the platform-appropriate signal — a
+// named Windows event on Windows (see worker_signal_windows.go), a no-op on Unix
+// where SIGTERM is already handled by signal.NotifyContext above.
 func RunWorker(ctx context.Context, opts Options) error {
 	o := opts.withDefaults()
 	log := o.logger().With(slog.String("role", "worker"))
 
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	ctx, stopGraceful := watchGracefulShutdown(ctx)
+	defer stopGraceful()
 
 	log.Info("worker serving", slog.Int("http_port", o.HTTPPort), slog.Int("grpc_port", o.GRPCPort))
 
@@ -89,11 +105,16 @@ func startCommand(o Options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "start",
 		Short: "Start the daemon in the background",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			pid, err := Start(o)
+			// F7: still print the friendly text, but now RETURN the sentinel (via
+			// ExitCodeFor -> ExitAlreadyRunning) instead of nil, so callers can
+			// script on "start against an already-running host" instead of
+			// silently seeing exit 0. See CHANGELOG.md 0.2.0 (breaking behavior).
 			if errors.Is(err, ErrAlreadyRunning) {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "already running: pid=%d\n", pid)
-				return nil
+				return err
 			}
 
 			// Spawned but readiness unconfirmed: report the pid with an explicit
@@ -121,14 +142,17 @@ func stopCommand(o Options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
 		Short: "Stop the background daemon",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			err := Stop(o)
-			// Idempotent: stopping something that is already stopped is a benign
-			// success, not a failure — mirrors start's ErrAlreadyRunning handling so
-			// repeated `stop` (or stop-after-crash) exits 0 instead of erroring.
+			// F7: still print the friendly text, but now RETURN ErrNotRunning
+			// (via ExitCodeFor -> ExitNotRunning) instead of nil. Stopping an
+			// already-stopped daemon remains a benign, expected outcome — it is
+			// just no longer indistinguishable from a real stop at the exit-code
+			// level. See CHANGELOG.md 0.2.0 (breaking behavior).
 			if errors.Is(err, ErrNotRunning) {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "not running")
-				return nil
+				return err
 			}
 
 			if err != nil {
@@ -146,11 +170,16 @@ func statusCommand(o Options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
 		Short: "Show whether the daemon is running",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			info := serverinfo.NewStore(o.DataDir).IsRunning()
 			if info == nil {
+				// F7: still print the friendly text, but now RETURN ErrNotRunning
+				// (via ExitCodeFor -> ExitNotRunning) instead of nil, mirroring the
+				// systemd convention that `status` on an inactive unit is non-zero.
+				// See CHANGELOG.md 0.2.0 (breaking behavior).
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "not running")
-				return nil
+				return ErrNotRunning
 			}
 
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "running: pid=%d addr=%s since=%s\n",
@@ -159,4 +188,31 @@ func statusCommand(o Options) *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// IsSupervisorCommand reports whether cmd is the library's hidden monitor or worker
+// command (o.MonitorCmd / o.WorkerCmd, as wired by AttachCommands). Nil-safe: a nil
+// cmd returns false. o should be the SAME Options passed to AttachCommands (custom
+// MonitorCmd/WorkerCmd names, if any); an un-defaulted zero-value Options compares
+// against "" and will never match, since AttachCommands only ever registers
+// withDefaults()'d command names ("__monitor"/"__worker" unless overridden).
+//
+// A consumer with its own exit-code contract MUST route these two commands' errors
+// through daemon.ExitCodeFor, and everything else through its own mapper — mixing
+// them up leaks the consumer's exit codes into the monitor<->worker protocol
+// (ExitStatus) and a clean shutdown can get misread as a crash, tripping an
+// unbounded restart loop. Typical wiring:
+//
+//	err := root.ExecuteContextC(ctx)
+//	cmd, _ := root.Find(os.Args[1:])
+//	if daemon.IsSupervisorCommand(cmd, opts) {
+//	        os.Exit(daemon.ExitCodeFor(err))
+//	}
+//	os.Exit(myApp.ExitCodeFor(err)) // the consumer's OWN exit-code contract
+func IsSupervisorCommand(cmd *cobra.Command, o Options) bool {
+	if cmd == nil {
+		return false
+	}
+
+	return cmd.Name() == o.MonitorCmd || cmd.Name() == o.WorkerCmd
 }
