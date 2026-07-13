@@ -19,6 +19,15 @@ const (
 const (
 	defaultGuardSize   = 4
 	defaultGuardWindow = 60 * time.Second
+
+	// defaultShutdownGrace is how long the monitor waits for the worker to exit on
+	// its own after asking it to stop (signalWorkerGraceful), before Go force-kills
+	// it via cmd.WaitDelay.
+	defaultShutdownGrace = 20 * time.Second
+
+	// defaultStopTimeout is how long Stop waits for the process to actually exit
+	// after GracefulStop before falling back to a forced kill.
+	defaultStopTimeout = 30 * time.Second
 )
 
 // Ports is the resolved port pair handed to the worker body.
@@ -47,9 +56,30 @@ type Options struct {
 	GuardSize   int
 	GuardWindow time.Duration
 
+	// ShutdownGrace is how long the monitor waits for the worker to exit on its own
+	// after asking it to stop (a CTRL_BREAK on Windows, SIGTERM on Unix — see
+	// signalWorkerGraceful), before force-killing it. This applies whenever the
+	// monitor's context is cancelled (ctx cancel, `svc stop`/`svc restart`, service
+	// manager shutdown). Zero means use the default (defaultShutdownGrace).
+	ShutdownGrace time.Duration
+
 	// MonitorCmd / WorkerCmd are the hidden Cobra command names. Default __monitor/__worker.
 	MonitorCmd string
 	WorkerCmd  string
+
+	// GracefulStop, when non-nil, is called by Stop (and therefore `service stop`) to
+	// ask the RUNNING daemon to shut down cleanly before any forced kill. The
+	// consumer implements however it talks to its own daemon (IPC, socket, HTTP,
+	// signal, ...). It should return promptly once the request is acknowledged; it
+	// need not wait for the process to actually exit — Stop polls that itself (via
+	// Status) up to StopTimeout. When nil, Stop force-kills immediately (today's
+	// behavior), so existing consumers are unaffected. Optional.
+	GracefulStop func(ctx context.Context) error
+
+	// StopTimeout bounds how long Stop (and `service stop`) waits for the process to
+	// actually exit after GracefulStop before falling back to a forced kill. Ignored
+	// when GracefulStop is nil. Zero means use the default (defaultStopTimeout).
+	StopTimeout time.Duration
 
 	// Serve is the worker body — the actual long-running process. Required.
 	Serve func(ctx context.Context, p Ports) error
@@ -131,13 +161,7 @@ func (o Options) withDefaults() Options {
 		o.GRPCPort = DefaultGRPCPort
 	}
 
-	if o.GuardSize == 0 {
-		o.GuardSize = defaultGuardSize
-	}
-
-	if o.GuardWindow == 0 {
-		o.GuardWindow = defaultGuardWindow
-	}
+	o = o.withTimingDefaults()
 
 	if o.MonitorCmd == "" {
 		o.MonitorCmd = "__monitor"
@@ -158,6 +182,30 @@ func (o Options) withDefaults() Options {
 		}
 
 		o.DataDir = filepath.Join(cache, o.BinaryName)
+	}
+
+	return o
+}
+
+// withTimingDefaults fills the guard/grace/timeout duration fields. Split out of
+// withDefaults purely to keep that function's cyclomatic complexity down — it
+// carries no independent ordering requirement relative to the rest of
+// withDefaults.
+func (o Options) withTimingDefaults() Options {
+	if o.GuardSize == 0 {
+		o.GuardSize = defaultGuardSize
+	}
+
+	if o.GuardWindow == 0 {
+		o.GuardWindow = defaultGuardWindow
+	}
+
+	if o.ShutdownGrace == 0 {
+		o.ShutdownGrace = defaultShutdownGrace
+	}
+
+	if o.StopTimeout == 0 {
+		o.StopTimeout = defaultStopTimeout
 	}
 
 	return o
