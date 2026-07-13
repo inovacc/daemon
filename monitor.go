@@ -28,7 +28,7 @@ type monitor struct {
 func newMonitor(o Options) *monitor {
 	return &monitor{
 		o:     o,
-		guard: newRestartGuard(o.GuardSize, o.GuardWindow),
+		guard: newRestartGuardFromConfig(o.resolveBreakerConfig(), o.resolveBackoffConfig()),
 		info:  serverinfo.NewStore(o.DataDir),
 		spawn: func(ctx context.Context, args []string) int { return realSpawn(ctx, args, o) },
 		sleep: time.Sleep,

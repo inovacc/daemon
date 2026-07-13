@@ -53,8 +53,28 @@ type Options struct {
 	portsExplicit bool
 
 	// GuardSize / GuardWindow tune the fork-loop guard (abort after N restarts in window).
+	//
+	// These map directly onto Breaker.MaxRestarts / Breaker.Window when Breaker
+	// is nil (the common case) — see resolveBreakerConfig. They are kept for
+	// back-compat; new code can set Breaker directly instead.
 	GuardSize   int
 	GuardWindow time.Duration
+
+	// Breaker, when set, overrides the sliding-window circuit breaker
+	// configuration derived from GuardSize/GuardWindow. Any zero-valued field
+	// (MaxRestarts <= 0, Window <= 0) still falls back to the corresponding
+	// GuardSize/GuardWindow value (post-defaulting), so a caller can override
+	// just one of the two. When Breaker is nil entirely, the breaker is built
+	// from GuardSize/GuardWindow alone — identical to the pre-Breaker
+	// restartGuard behavior. See resolveBreakerConfig.
+	Breaker *BreakerConfig
+
+	// Backoff, when set, overrides the restart-delay curve. When nil, the
+	// monitor uses the legacy deterministic (zero-jitter) curve — Base=1s,
+	// Cap=60s, Multiplier=2.0, Jitter=0 — reproducing the exact delays the
+	// original ad-hoc restartGuard.backoff computed, so existing consumers see
+	// no behavior change unless they opt in. See resolveBackoffConfig.
+	Backoff *BackoffConfig
 
 	// ShutdownGrace is how long the monitor waits for the worker to exit on its own
 	// after asking it to stop, before force-killing it. This applies whenever the
@@ -192,6 +212,67 @@ func (o Options) withDefaults() Options {
 	}
 
 	return o
+}
+
+// resolveBreakerConfig derives the effective BreakerConfig for a monitor.
+//
+// Precedence: an explicitly-set Options.Breaker field wins; any field left
+// zero-valued on it (MaxRestarts <= 0 or Window <= 0) falls back to the
+// corresponding GuardSize/GuardWindow value. When Options.Breaker is nil
+// entirely, the result is exactly {MaxRestarts: o.GuardSize, Window:
+// o.GuardWindow} — the pre-Breaker restartGuard behavior. Callers must invoke
+// this AFTER withDefaults (so GuardSize/GuardWindow are already filled).
+func (o Options) resolveBreakerConfig() BreakerConfig {
+	if o.Breaker == nil {
+		return BreakerConfig{MaxRestarts: o.GuardSize, Window: o.GuardWindow}
+	}
+
+	cfg := *o.Breaker
+
+	if cfg.MaxRestarts <= 0 {
+		cfg.MaxRestarts = o.GuardSize
+	}
+
+	if cfg.Window <= 0 {
+		cfg.Window = o.GuardWindow
+	}
+
+	return cfg
+}
+
+// resolveBackoffConfig derives the effective BackoffConfig for a monitor.
+//
+// When Options.Backoff is nil, the legacy deterministic (zero-jitter) curve
+// is used — see legacyBackoffConfig — so existing consumers observe no
+// behavior change. When Options.Backoff is set, any zero/invalid field is
+// filled with the same legacy default for that field individually, so a
+// caller can override e.g. just Jitter without having to respecify Base/Cap/
+// Multiplier.
+func (o Options) resolveBackoffConfig() BackoffConfig {
+	if o.Backoff == nil {
+		return legacyBackoffConfig()
+	}
+
+	cfg := *o.Backoff
+
+	def := legacyBackoffConfig()
+	if cfg.Base <= 0 {
+		cfg.Base = def.Base
+	}
+
+	if cfg.Cap <= 0 {
+		cfg.Cap = def.Cap
+	}
+
+	if cfg.Multiplier < 1 {
+		cfg.Multiplier = def.Multiplier
+	}
+
+	if cfg.Jitter < 0 || cfg.Jitter >= 1 {
+		cfg.Jitter = def.Jitter
+	}
+
+	return cfg
 }
 
 // withTimingDefaults fills the guard/grace/timeout duration fields. Split out of
