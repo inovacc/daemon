@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -20,6 +22,15 @@ const (
 	itCounterEnv       = "DAEMON_IT_COUNTER"
 	itCrashesEnv       = "DAEMON_IT_CRASHES"
 	itSuiteHardTimeout = 120 * time.Second
+	// itSleepEnv, when set, makes this test binary block forever (until killed)
+	// instead of running the test suite. Used by stopwait_test.go to exercise
+	// waitForProcessExit against a real OS process without recursing into m.Run().
+	itSleepEnv = "DAEMON_IT_SLEEP"
+	// itGraceEnv selects the F4 grace-period worker role: "graceful" installs the
+	// same signal.NotifyContext RunWorker uses and exits cleanly once cancelled;
+	// "stubborn" explicitly ignores the graceful signal so it can only be reaped by
+	// a forced kill after WaitDelay. Used by monitor_grace_test.go.
+	itGraceEnv = "DAEMON_IT_GRACE"
 )
 
 func itBumpCounter(path string) int {
@@ -39,6 +50,39 @@ func itReadCounter(path string) int {
 }
 
 func TestMain(m *testing.M) {
+	// Spawned sleeper role: block forever (until killed) and never recurse into the
+	// suite. Used to give waitForProcessExit tests a real, killable OS process.
+	// time.Sleep, not `select {}`: an empty select with no other goroutines running
+	// trips Go's runtime deadlock detector, which crashes the process almost
+	// immediately instead of truly blocking.
+	if os.Getenv(itSleepEnv) != "" {
+		time.Sleep(time.Hour)
+		os.Exit(0)
+	}
+
+	// Spawned F4 grace-period worker roles. Mirrors RunWorker's actual shutdown
+	// wiring (signal.NotifyContext + watchGracefulShutdown) so these roles exercise
+	// the real platform mechanism (a named event on Windows, SIGTERM on Unix) that
+	// realSpawn's prepareGracefulShutdown drives, not just a raw os/signal listen.
+	switch os.Getenv(itGraceEnv) {
+	case "graceful":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
+		ctx, stopGraceful := watchGracefulShutdown(ctx)
+
+		<-ctx.Done()
+		// This process exits immediately below (os.Exit never returns), so there is
+		// no later point for a deferred stop/stopGraceful to run — call them
+		// directly instead of deferring (gocritic: exitAfterDefer).
+		stopGraceful()
+		stop()
+		os.Exit(ExitSuccess.AsInt())
+	case "stubborn":
+		signal.Ignore(os.Interrupt, syscall.SIGTERM)
+		time.Sleep(time.Hour) // outlives any test timeout; only a forced kill reaps it
+		os.Exit(ExitSuccess.AsInt())
+	}
+
 	// Spawned worker role: play it and exit; never recurse into the suite.
 	if path := os.Getenv(itCounterEnv); path != "" {
 		n := itBumpCounter(path)

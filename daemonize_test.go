@@ -2,9 +2,11 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -139,6 +141,75 @@ func TestStartCommandReportsUnconfirmed(t *testing.T) {
 	}
 }
 
+// F3: Status reports running=true and the recorded PID for a live instance.
+func TestStatusRunning(t *testing.T) {
+	dir := t.TempDir()
+	_ = serverinfo.NewStore(dir).Write(serverinfo.Info{PID: os.Getpid()})
+
+	running, pid, err := Status(Options{BinaryName: "t", DataDir: dir})
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	if !running {
+		t.Fatal("Status should report running=true for a live pid")
+	}
+
+	if pid != os.Getpid() {
+		t.Errorf("pid = %d, want %d", pid, os.Getpid())
+	}
+}
+
+// F3: Status reports running=false (nil error) when no serverinfo exists.
+func TestStatusNotRunningNoRecord(t *testing.T) {
+	running, pid, err := Status(Options{BinaryName: "t", DataDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	if running {
+		t.Fatal("Status should report running=false when there is no record")
+	}
+
+	if pid != 0 {
+		t.Errorf("pid = %d, want 0", pid)
+	}
+}
+
+// F3: Status reports running=false (nil error), not an error, for a stale record
+// whose PID is dead — mirroring serverinfo.Store.IsRunning's self-healing.
+func TestStatusNotRunningDeadPID(t *testing.T) {
+	dir := t.TempDir()
+	// A PID essentially guaranteed to be dead / not-ours in this test environment:
+	// spawn and immediately reap a short-lived process, then reuse its now-dead pid.
+	cmd := exec.Command(os.Args[0], "-test.run=^$")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("spawn short-lived helper: %v", err)
+	}
+
+	deadPID := cmd.ProcessState.Pid()
+
+	_ = serverinfo.NewStore(dir).Write(serverinfo.Info{PID: deadPID})
+
+	running, pid, err := Status(Options{BinaryName: "t", DataDir: dir})
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	if running {
+		t.Fatalf("Status should report running=false for a dead pid %d", deadPID)
+	}
+
+	if pid != 0 {
+		t.Errorf("pid = %d, want 0", pid)
+	}
+
+	// The stale record should have been self-healed (removed) as a side effect.
+	if serverinfo.NewStore(dir).IsRunning() != nil {
+		t.Error("stale serverinfo should have been removed")
+	}
+}
+
 func TestStopNotRunning(t *testing.T) {
 	if err := Stop(Options{BinaryName: "t", DataDir: t.TempDir()}); !errors.Is(err, ErrNotRunning) {
 		t.Errorf("err = %v, want ErrNotRunning", err)
@@ -209,5 +280,157 @@ func TestStopLogsRemoveFailureButSucceeds(t *testing.T) {
 
 	if out := buf.String(); !strings.Contains(out, "failed to remove server info file") {
 		t.Fatalf("expected a warning about the failed removal, got %q", out)
+	}
+}
+
+// F6: with GracefulStop set, Stop calls it, then confirms the process is gone via
+// Status — NOT via a bare "the hook returned" — before returning. The hook here
+// simulates the daemon shutting down cleanly by removing its own serverinfo
+// record, which is what a real monitor does on exit. No forced kill (stopProcessFn)
+// should be needed.
+func TestStopGracefulPathSkipsForceKill(t *testing.T) {
+	dir := t.TempDir()
+	store := serverinfo.NewStore(dir)
+	_ = store.Write(serverinfo.Info{PID: os.Getpid()})
+
+	origPoll := statusPollInterval
+
+	t.Cleanup(func() { statusPollInterval = origPoll })
+
+	statusPollInterval = time.Millisecond
+
+	origStop := stopProcessFn
+
+	t.Cleanup(func() { stopProcessFn = origStop })
+
+	forceKillCalled := false
+	stopProcessFn = func(int) error {
+		forceKillCalled = true
+		return nil
+	}
+
+	graceCalled := false
+	o := Options{
+		BinaryName:  "t",
+		DataDir:     dir,
+		StopTimeout: 2 * time.Second,
+		GracefulStop: func(context.Context) error {
+			graceCalled = true
+			// Simulate the daemon exiting cleanly on its own.
+			return store.Remove()
+		},
+	}
+
+	if err := Stop(o); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+
+	if !graceCalled {
+		t.Fatal("GracefulStop was never called")
+	}
+
+	if forceKillCalled {
+		t.Fatal("a successful graceful stop must not fall back to a forced kill")
+	}
+}
+
+// F6: when GracefulStop is called but the process is still alive at StopTimeout,
+// Stop must fall back to a forced kill (stopProcessFn) instead of reporting a false
+// success.
+func TestStopGracefulTimeoutFallsBackToForceKill(t *testing.T) {
+	dir := t.TempDir()
+	store := serverinfo.NewStore(dir)
+	_ = store.Write(serverinfo.Info{PID: os.Getpid()}) // this test process: stays "alive"
+
+	origPoll := statusPollInterval
+
+	t.Cleanup(func() { statusPollInterval = origPoll })
+
+	statusPollInterval = time.Millisecond
+
+	origStop := stopProcessFn
+
+	t.Cleanup(func() { stopProcessFn = origStop })
+
+	forceKillCalled := false
+	stopProcessFn = func(int) error {
+		forceKillCalled = true
+		return nil
+	}
+
+	o := Options{
+		BinaryName:  "t",
+		DataDir:     dir,
+		StopTimeout: 20 * time.Millisecond,
+		GracefulStop: func(context.Context) error {
+			return nil // acknowledged, but the (faked) process never actually exits
+		},
+	}
+
+	if err := Stop(o); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+
+	if !forceKillCalled {
+		t.Fatal("a graceful-stop timeout must fall back to a forced kill")
+	}
+}
+
+// F6: a GracefulStop hook that itself errors must still fall back to a forced kill
+// rather than leaving the daemon running.
+func TestStopGracefulHookErrorFallsBackToForceKill(t *testing.T) {
+	dir := t.TempDir()
+	_ = serverinfo.NewStore(dir).Write(serverinfo.Info{PID: os.Getpid()})
+
+	origStop := stopProcessFn
+
+	t.Cleanup(func() { stopProcessFn = origStop })
+
+	forceKillCalled := false
+	stopProcessFn = func(int) error {
+		forceKillCalled = true
+		return nil
+	}
+
+	o := Options{
+		BinaryName:  "t",
+		DataDir:     dir,
+		StopTimeout: 20 * time.Millisecond,
+		GracefulStop: func(context.Context) error {
+			return errors.New("ipc unreachable")
+		},
+	}
+
+	if err := Stop(o); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+
+	if !forceKillCalled {
+		t.Fatal("a failing GracefulStop hook must fall back to a forced kill")
+	}
+}
+
+// F6: a nil GracefulStop must behave exactly like pre-0.2.0 Stop — straight to the
+// forced kill, no behavior change for existing consumers.
+func TestStopNilGracefulStopUsesForceKillDirectly(t *testing.T) {
+	dir := t.TempDir()
+	_ = serverinfo.NewStore(dir).Write(serverinfo.Info{PID: os.Getpid()})
+
+	origStop := stopProcessFn
+
+	t.Cleanup(func() { stopProcessFn = origStop })
+
+	forceKillCalled := false
+	stopProcessFn = func(int) error {
+		forceKillCalled = true
+		return nil
+	}
+
+	if err := Stop(Options{BinaryName: "t", DataDir: dir}); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+
+	if !forceKillCalled {
+		t.Fatal("nil GracefulStop must force-kill directly, unchanged from pre-0.2.0 behavior")
 	}
 }

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -99,14 +100,89 @@ func Start(o Options) (int, error) {
 	return pid, ErrHealthCheckTimeout
 }
 
+// Status reports whether the daemon is currently running, and the monitor's PID.
+// It reads the serverinfo store under the resolved DataDir and verifies the
+// recorded PID is actually alive (self-healing a stale record left by a crashed
+// monitor, via serverinfo.Store.IsRunning). Returns running=false (nil error) when
+// there is no serverinfo or the PID is dead — never an error for that case.
+func Status(o Options) (running bool, pid int, err error) {
+	o = o.withDefaults()
+
+	info := serverinfo.NewStore(o.DataDir).IsRunning()
+	if info == nil {
+		return false, 0, nil
+	}
+
+	return true, info.PID, nil
+}
+
+// statusPollInterval is the interval Stop uses while waiting for the process to
+// actually exit after GracefulStop. A package var so tests can shrink it.
+var statusPollInterval = 100 * time.Millisecond
+
+// waitUntilStopped polls Status(o) until the monitor PID is gone or timeout
+// elapses. Returns true once the daemon is confirmed stopped.
+func waitUntilStopped(o Options, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+
+	for {
+		if running, _, _ := Status(o); !running {
+			return true
+		}
+
+		if time.Now().After(deadline) {
+			return false
+		}
+
+		time.Sleep(statusPollInterval)
+	}
+}
+
 // Stop reads the serverinfo (monitor) pid and terminates the daemon process tree.
+//
+// When Options.GracefulStop is set, Stop asks the running daemon to shut down
+// cleanly first (via the consumer-supplied hook), then polls actual PID liveness
+// (Status) — NOT merely "the hook returned" — up to StopTimeout before falling back
+// to a forced kill. Polling real PID liveness matters: a consumer whose app-level
+// listener closes well before the OS process actually exits must not report success
+// while the monitor is still alive, or a following Start will no-op into an empty
+// system. When GracefulStop is nil, Stop force-kills immediately (unchanged
+// behavior), so existing consumers are unaffected.
 func Stop(o Options) error {
 	o = o.withDefaults()
 	store := serverinfo.NewStore(o.DataDir)
+	log := o.logger()
 
 	info := store.IsRunning()
 	if info == nil {
 		return ErrNotRunning
+	}
+
+	if o.GracefulStop != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), o.StopTimeout)
+		hookErr := o.GracefulStop(ctx)
+
+		cancel()
+
+		switch {
+		case hookErr != nil:
+			log.Warn("daemon: graceful stop hook failed; falling back to a forced kill",
+				slog.Any("err", hookErr))
+		case waitUntilStopped(o, o.StopTimeout):
+			// Confirmed stopped via the graceful path: server.json is already
+			// removed by the monitor itself (or self-healed by IsRunning), but
+			// remove defensively in case the monitor died without its own cleanup
+			// running.
+			if err := store.Remove(); err != nil {
+				log.Warn("daemon: stopped worker but failed to remove server info file",
+					slog.String("path", store.Path()), slog.Any("err", err))
+			}
+
+			return nil
+		default:
+			log.Warn("daemon: graceful stop timed out; forcing kill",
+				slog.Duration("timeout", o.StopTimeout), slog.Int("pid", info.PID))
+		}
 	}
 
 	if err := stopProcessFn(info.PID); err != nil {
@@ -117,7 +193,7 @@ func Stop(o Options) error {
 	// IsRunning self-heals a stale record on the next call. Do not swallow it silently,
 	// though — log it so an operator can see (and clean up) a leaked server.json.
 	if err := store.Remove(); err != nil {
-		o.logger().Warn("daemon: stopped worker but failed to remove server info file",
+		log.Warn("daemon: stopped worker but failed to remove server info file",
 			slog.String("path", store.Path()), slog.Any("err", err))
 	}
 

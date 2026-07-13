@@ -30,7 +30,7 @@ func newMonitor(o Options) *monitor {
 		o:     o,
 		guard: newRestartGuard(o.GuardSize, o.GuardWindow),
 		info:  serverinfo.NewStore(o.DataDir),
-		spawn: realSpawn,
+		spawn: func(ctx context.Context, args []string) int { return realSpawn(ctx, args, o) },
 		sleep: time.Sleep,
 	}
 }
@@ -110,7 +110,12 @@ func (m *monitor) run(ctx context.Context) error {
 			continue
 		// ExitError, ExitNeedsPrivilege, and any unknown code are all treated as a crash:
 		// the worker is restarted subject to the fork-loop guard and backoff.
-		case ExitError, ExitNeedsPrivilege:
+		// ExitAlreadyRunning / ExitNotRunning (F7) are CLI-only outcomes (service
+		// start/stop/status) — a worker process would never legitimately exit with
+		// either, so they fall through to the same crash handling as any other
+		// unexpected code. Listed explicitly (not folded into default) to satisfy
+		// exhaustive-switch coverage over ExitStatus's full value set.
+		case ExitError, ExitNeedsPrivilege, ExitAlreadyRunning, ExitNotRunning:
 			if stop, err := m.handleCrash(ctx, log, code, &attempt); stop {
 				return err
 			}
@@ -159,19 +164,57 @@ func (m *monitor) handleCrash(ctx context.Context, log *slog.Logger, code ExitSt
 }
 
 // realSpawn executes the worker as a child of this process, inheriting stdio.
-func realSpawn(ctx context.Context, args []string) int {
+//
+// The worker gets its own platform SysProcAttr (workerSysProcAttr, F1): on Windows
+// this suppresses the phantom console that would otherwise be allocated for a child
+// of the console-less monitor, while keeping the worker a true child (not detached)
+// so cmd.Run can wait on it and `taskkill /T` still reaps the tree; on Unix it puts
+// the worker in its own process group.
+//
+// On context cancellation, Go's default behavior is an immediate Process.Kill() of
+// the worker. cmd.Cancel + cmd.WaitDelay replace that with a grace period (F4):
+// prepareGracefulShutdown wires up a platform-appropriate way to ask the worker to
+// stop cleanly (a named Windows event on Windows, SIGTERM on Unix — see
+// worker_signal_*.go for why a named event is used on Windows instead of a
+// console-control event), and cmd.WaitDelay bounds how long Go waits for that
+// before force-killing.
+func realSpawn(ctx context.Context, args []string, o Options) int {
 	exe, err := os.Executable()
 	if err != nil {
 		return ExitError.AsInt()
 	}
 
 	cmd := exec.CommandContext(ctx, exe, args...)
+	cmd.SysProcAttr = workerSysProcAttr()
+
+	cancelGraceful, cleanupGraceful := prepareGracefulShutdown(cmd)
+	defer cleanupGraceful()
+
+	cmd.Cancel = cancelGraceful
+	cmd.WaitDelay = o.ShutdownGrace
 
 	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
 	if err := cmd.Run(); err != nil {
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
 			return ee.ExitCode()
+		}
+
+		// A successful cmd.Cancel call (the graceful-shutdown signal was
+		// delivered) makes Go's exec package report ctx.Err() from Wait, even
+		// when the worker went on to exit CLEANLY on its own — os/exec
+		// deliberately treats a cancelled-context run as an error independent
+		// of the child's actual exit code (see os/exec.Cmd.watchCtx). Recover
+		// the worker's REAL exit code from ProcessState so a worker that exits
+		// promptly after the graceful signal still reports its true status
+		// (ExitSuccess, or whatever it chose) to the monitor, per F4's
+		// requirement that the exit-code protocol survive the signal.
+		// ProcessState.ExitCode() is -1 if the process hasn't exited or was
+		// killed by a signal (e.g. the WaitDelay force-kill path), which is
+		// never ExitSuccess (0) — consistent with "a force-killed worker must
+		// not report success".
+		if cmd.ProcessState != nil {
+			return cmd.ProcessState.ExitCode()
 		}
 
 		return ExitError.AsInt()

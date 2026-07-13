@@ -31,6 +31,14 @@ type Info struct {
 	Version   string    `json:"version,omitempty"`
 }
 
+// ProcessAlive reports whether pid refers to a currently-live process, using the
+// platform-appropriate check (processAlive). Exported so callers outside this
+// package (e.g. the stop-confirmation poll in stop_windows.go / stop_unix.go) can
+// reuse the same liveness logic instead of duplicating it.
+func ProcessAlive(pid int) bool {
+	return processAlive(pid)
+}
+
 // Store reads and writes a single server.json within a directory.
 type Store struct {
 	dir   string

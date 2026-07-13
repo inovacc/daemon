@@ -71,6 +71,83 @@ func TestAttachRegistersServiceAndHiddenCommands(t *testing.T) {
 	}
 }
 
+// F2: `service <bogus>` must NOT silently start the daemon (RunMonitor). Without
+// Args: cobra.NoArgs, Cobra swallows the unrecognized positional arg and RunE still
+// fires. This pins the fix by asserting the monitor is never invoked and an error
+// is returned.
+func TestServiceCommandRejectsUnknownArgs(t *testing.T) {
+	root := &cobra.Command{Use: "root"}
+
+	monitorInvoked := false
+
+	if err := AttachCommands(root, Options{
+		BinaryName: "t",
+		DataDir:    t.TempDir(),
+		Serve: func(context.Context, Ports) error {
+			monitorInvoked = true
+			return nil
+		},
+	}); err != nil {
+		t.Fatalf("AttachCommands: %v", err)
+	}
+
+	root.SetArgs([]string{"service", "bogus"})
+	root.SetOut(new(bytes.Buffer))
+	root.SetErr(new(bytes.Buffer))
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("`service bogus` must return an error, not silently succeed")
+	}
+
+	if monitorInvoked {
+		t.Fatal("`service bogus` must NOT invoke RunMonitor (Options.Serve)")
+	}
+}
+
+// F8: IsSupervisorCommand identifies the hidden __monitor/__worker commands (and
+// only those), so a consumer with its own exit-code contract can route their
+// errors through daemon.ExitCodeFor while routing everything else through its own
+// mapper.
+func TestIsSupervisorCommand(t *testing.T) {
+	root := &cobra.Command{Use: "root"}
+
+	o := Options{
+		BinaryName: "t",
+		DataDir:    t.TempDir(),
+		Serve:      func(context.Context, Ports) error { return nil },
+	}.withDefaults()
+
+	if err := AttachCommands(root, o); err != nil {
+		t.Fatalf("AttachCommands: %v", err)
+	}
+
+	find := func(name string) *cobra.Command {
+		cmd, _, err := root.Find([]string{name})
+		if err != nil {
+			t.Fatalf("Find(%q): %v", name, err)
+		}
+
+		return cmd
+	}
+
+	if !IsSupervisorCommand(find("__monitor"), o) {
+		t.Error("__monitor must be identified as a supervisor command")
+	}
+
+	if !IsSupervisorCommand(find("__worker"), o) {
+		t.Error("__worker must be identified as a supervisor command")
+	}
+
+	if IsSupervisorCommand(find("service"), o) {
+		t.Error("service must NOT be identified as a supervisor command")
+	}
+
+	if IsSupervisorCommand(nil, o) {
+		t.Error("IsSupervisorCommand(nil, o) must be false")
+	}
+}
+
 func TestRunWorkerInvokesServeWithPorts(t *testing.T) {
 	var gotPorts Ports
 
@@ -141,14 +218,22 @@ func TestAttachRegistersSvcGroup(t *testing.T) {
 	}
 }
 
+// F7: `service start` against an already-running daemon still prints the friendly
+// "already running" text, but now returns ErrAlreadyRunning (-> exit 6 via
+// ExitCodeFor) instead of nil, so callers can script on the state. This is an
+// intentional 0.2.0 breaking behavior change (see CHANGELOG.md).
 func TestStartCommandAlreadyRunning(t *testing.T) {
 	dir := t.TempDir()
 	// A live record (this test's own pid) makes Start return ErrAlreadyRunning.
 	_ = serverinfo.NewStore(dir).Write(serverinfo.Info{PID: os.Getpid()})
 
 	out, err := runSubcommand(t, startCommand(Options{BinaryName: "t", DataDir: dir}.withDefaults()), "start")
-	if err != nil {
-		t.Fatalf("already-running is not a CLI failure, got err %v", err)
+	if !errors.Is(err, ErrAlreadyRunning) {
+		t.Fatalf("already-running must return ErrAlreadyRunning, got %v", err)
+	}
+
+	if got := ExitCodeFor(err); got != int(ExitAlreadyRunning) {
+		t.Fatalf("ExitCodeFor(err) = %d, want %d (ExitAlreadyRunning)", got, ExitAlreadyRunning)
 	}
 
 	if !strings.Contains(out, "already running") || !strings.Contains(out, "pid=") {
@@ -220,12 +305,20 @@ func TestStopCommandSuccess(t *testing.T) {
 	}
 }
 
+// F7: `service stop` against an idle daemon still prints the friendly "not
+// running" text, but now returns ErrNotRunning (-> exit 7 via ExitCodeFor) instead
+// of nil, so callers can script on the state. This is an intentional 0.2.0
+// breaking behavior change (see CHANGELOG.md).
 func TestStopCommandIdempotentWhenNotRunning(t *testing.T) {
-	// No record → Stop returns ErrNotRunning; the command must treat that as a
-	// benign, exit-0 outcome ("not running"), not a hard CLI failure.
+	// No record → Stop returns ErrNotRunning; the command reports it as benign
+	// ("not running") but still surfaces the sentinel via the returned error.
 	out, err := runSubcommand(t, stopCommand(Options{BinaryName: "t", DataDir: t.TempDir()}.withDefaults()), "stop")
-	if err != nil {
-		t.Fatalf("stopping a stopped daemon must not error, got %v", err)
+	if !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("stopping a stopped daemon must return ErrNotRunning, got %v", err)
+	}
+
+	if got := ExitCodeFor(err); got != int(ExitNotRunning) {
+		t.Fatalf("ExitCodeFor(err) = %d, want %d (ExitNotRunning)", got, ExitNotRunning)
 	}
 
 	if !strings.Contains(out, "not running") {
@@ -258,10 +351,18 @@ func TestStopCommandPropagatesError(t *testing.T) {
 	}
 }
 
+// F7: `service status` against an idle daemon still prints "not running", but now
+// returns ErrNotRunning (-> exit 7 via ExitCodeFor) instead of nil — mirroring the
+// systemd convention that status on an inactive unit is non-zero. Intentional
+// 0.2.0 breaking behavior change (see CHANGELOG.md).
 func TestStatusCommandNotRunning(t *testing.T) {
 	out, err := runSubcommand(t, statusCommand(Options{BinaryName: "t", DataDir: t.TempDir()}.withDefaults()), "status")
-	if err != nil {
-		t.Fatalf("status: %v", err)
+	if !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("status on an idle daemon must return ErrNotRunning, got %v", err)
+	}
+
+	if got := ExitCodeFor(err); got != int(ExitNotRunning) {
+		t.Fatalf("ExitCodeFor(err) = %d, want %d (ExitNotRunning)", got, ExitNotRunning)
 	}
 
 	if !strings.Contains(out, "not running") {
