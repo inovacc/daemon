@@ -8,6 +8,18 @@ All notable changes to this project are documented here. The format is based on
 
 _Nothing yet._
 
+## [0.1.1] - 2026-07-13
+
+**No library code changed** — v0.1.1 is functionally identical to v0.1.0. This release
+only lifts the dependency floor and carries the repository's CI/security hardening.
+
+### Changed
+- Raise dependency minimums: `golang.org/x/sys` 0.44.0 → 0.47.0 and
+  `github.com/kardianos/service` 1.2.2 → 1.3.0.
+- CI: govulncheck is now a required gate; tests run on a windows/linux/macOS matrix with a
+  lint gate; all GitHub Actions are pinned to commit SHAs and tracked by dependabot;
+  releases are automated from tags.
+
 ## [0.1.0] - 2026-07-12
 
 First tagged release. CI green on windows/linux/darwin; coverage 81.7%.
