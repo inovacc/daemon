@@ -1,5 +1,5 @@
 # Backlog
-<!-- rev:005 -->
+<!-- rev:006 -->
 
 ## Priority Levels
 | Priority | Timeline |
@@ -10,12 +10,9 @@
 
 ## Items
 
-_The first release (v0.1.0) is out and CI is green on `main`. The two remaining items are
-blocked on external prerequisites (the kody source, or the weaver/kody repos)._
-
-- **Priority:** P2 — **Category:** Release — **Effort:** Small
-  - Add a `release.yml` (tag-triggered) and pin CI actions to SHAs, now that CI is green and
-    v0.1.0 is tagged.
+_v0.1.0 is released, CI is green on `main`, and release automation is in place. The only
+remaining items are blocked on external prerequisites (the kody source, or the weaver/kody
+repos)._
 
 - **Priority:** P2 — **Category:** Feature — **Effort:** Large — **[BLOCKED: needs kody source + spec]**
   - Optional gRPC daemon path (server + IdleTracker + discovery) lifted from kody, behind an
@@ -28,6 +25,7 @@ blocked on external prerequisites (the kody source, or the weaver/kody repos)._
 
 ## Resolved
 
+- **P2 · Release** — release automation. ✅ 2026-07-12, `6b6e9a2` — tag-triggered `release.yml` + CI actions pinned to SHAs + codecov hardened. v0.1.0 GitHub Release published.
 - **P2 · Observability** — restart/crash counters. ✅ 2026-07-12, `2ffb42d` — added the optional `Options.OnRestart` hook.
 - **P2 · Test** — real spawn→crash→restart integration test + TestMain hard timeout. ✅ 2026-07-12, `49c2d90` — realSpawn 0%→81.8%, total →79.6%.
 - **P3 · Code-Quality** — re-enable gosec + a complexity linter. ✅ 2026-07-12, `af65e16` — gosec + gocyclo on; dir 0750, pid overflow guard; by-design/test findings excluded.

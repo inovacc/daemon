@@ -21,3 +21,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:
 - Run `task check` before submitting
 - Maintain 80%+ test coverage
 - Follow Go conventions and the project linter config
+
+### Reporting Security Issues
+Do not open a public issue for a vulnerability — follow [SECURITY.md](../SECURITY.md)
+(private GitHub advisory).
