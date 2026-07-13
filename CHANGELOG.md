@@ -33,6 +33,16 @@ consumer gets them instead of hand-rolling them.
   as soon as the kill/signal call itself succeeded. Fixes a race where `stop`
   could report success while the monitor was still alive, causing a following
   `start` to no-op into an empty system.
+- **PID liveness on Unix (zombies):** `processAlive` no longer reports an exited-
+  but-unreaped child (a *zombie*) as running. `kill(pid, 0)` succeeds for a zombie,
+  so the old probe made F5's exit-confirmation poll hang until timeout whenever the
+  caller was the process's parent — which `Start()` is, since `spawnDetached` uses
+  `cmd.Start()` + `Release()` and never reaps. Linux now reads `/proc/<pid>/stat`
+  and darwin queries `kern.proc.pid` via sysctl, both of which report the zombie
+  state directly.
+- **PID liveness on Unix (EPERM):** `processAlive` no longer reports a process that
+  exists but which we lack permission to signal (`kill` → `EPERM`, e.g. a monitor
+  running as root or another user) as *dead*. Only `ESRCH` now means gone.
 
 ### Added
 - **F3:** `Status(o Options) (running bool, pid int, err error)` — exported query
@@ -68,6 +78,21 @@ consumer gets them instead of hand-rolling them.
   exit-0-always behavior.
 
 ### Security
+- **Graceful-shutdown event is DACL-restricted (Windows).** The F4 named event is
+  created with an explicit *protected* DACL granting access only to the creating
+  user, LocalSystem, and Administrators (SDDL
+  `D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;<creator SID>)`), instead of the default
+  security descriptor. A named kernel object with a default DACL can be opened by
+  any process in the same session, so without this **any local process could open
+  `Local\daemon-graceful-*` and signal it to trigger an unauthenticated graceful
+  shutdown of the daemon** (local denial of service). Mirrors the named-pipe DACL
+  hardening in the sibling `indexer` project.
+- **No `CloseHandle` with an outstanding wait (Windows).** The worker-side waiter
+  now blocks on the graceful event *and* a local "done" event via
+  `WaitForMultipleObjects`, and cleanup signals `done` and joins the waiter before
+  closing either handle. Previously a worker exiting for any reason other than the
+  event firing would close a handle that still had a pending
+  `WaitForSingleObject(INFINITE)` on it — a documented handle-reuse hazard.
 - The Windows F4 mechanism deliberately avoids
   `GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, ...)` even though F1's
   `CREATE_NEW_PROCESS_GROUP` would make it possible in principle: CTRL events

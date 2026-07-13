@@ -8,9 +8,17 @@ import (
 
 // F4: on context cancellation, realSpawn must give the worker a grace period
 // (ShutdownGrace) instead of Go's default immediate Process.Kill(). A worker that
-// exits promptly on the graceful signal (CTRL_BREAK on Windows / SIGTERM on Unix)
-// must be observed to exit cleanly, well within ShutdownGrace, and its real exit
-// code (ExitSuccess) must still reach the monitor.
+// exits promptly on the graceful stop request — a named Windows event on Windows
+// (see prepareGracefulShutdown / watchGracefulShutdown; NOT a CTRL_BREAK console
+// event, which cannot reach a CREATE_NO_WINDOW worker), SIGTERM on Unix — must be
+// observed to exit cleanly, well within ShutdownGrace, and its real exit code
+// (ExitSuccess) must still reach the monitor.
+//
+// On Windows this is also the end-to-end proof that the event's restrictive DACL
+// (creator + SYSTEM + Administrators) still lets the worker — same user, a
+// different process — open and wait on the event: if the DACL were too tight, the
+// worker's OpenEvent would fail, it would never observe the stop request, and it
+// would be force-killed after WaitDelay instead of reporting ExitSuccess.
 func TestRealSpawnGracefulWorkerExitsWithoutForceKill(t *testing.T) {
 	if testing.Short() {
 		t.Skip("spawns a real worker process; skipped under -short")

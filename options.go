@@ -21,8 +21,8 @@ const (
 	defaultGuardWindow = 60 * time.Second
 
 	// defaultShutdownGrace is how long the monitor waits for the worker to exit on
-	// its own after asking it to stop (signalWorkerGraceful), before Go force-kills
-	// it via cmd.WaitDelay.
+	// its own after asking it to stop (prepareGracefulShutdown), before Go
+	// force-kills it via cmd.WaitDelay.
 	defaultShutdownGrace = 20 * time.Second
 
 	// defaultStopTimeout is how long Stop waits for the process to actually exit
@@ -57,10 +57,17 @@ type Options struct {
 	GuardWindow time.Duration
 
 	// ShutdownGrace is how long the monitor waits for the worker to exit on its own
-	// after asking it to stop (a CTRL_BREAK on Windows, SIGTERM on Unix — see
-	// signalWorkerGraceful), before force-killing it. This applies whenever the
+	// after asking it to stop, before force-killing it. This applies whenever the
 	// monitor's context is cancelled (ctx cancel, `svc stop`/`svc restart`, service
 	// manager shutdown). Zero means use the default (defaultShutdownGrace).
+	//
+	// The stop request reaches the worker as a SIGTERM on Unix, and on Windows as a
+	// named Windows event the worker waits on (NOT a CTRL_BREAK console event, which
+	// cannot be delivered to a worker spawned with CREATE_NO_WINDOW — see
+	// prepareGracefulShutdown / watchGracefulShutdown in worker_signal_windows.go).
+	// The event carries a restrictive DACL (creator + SYSTEM + Administrators), so
+	// an unprivileged local process cannot use it to trigger a shutdown.
+	// daemon.RunWorker already listens for both mechanisms.
 	ShutdownGrace time.Duration
 
 	// MonitorCmd / WorkerCmd are the hidden Cobra command names. Default __monitor/__worker.
