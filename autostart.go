@@ -25,15 +25,29 @@ const (
 )
 
 // autostartVerb is the subcommand a STANDALONE autostart entry launches:
-// "<exe> service" (the monitor supervisor). The combined `svc install
-// --autostart` path instead launches "svc start" so the trigger merely asks the
-// SCM to start the already-installed service (Google-style: service + trigger,
-// one process). Kept in one place so the Run-key value and the scheduled-task
-// action stay identical for a given mode.
+// "<exe> service start" — the DAEMONIZING form, which spawns a detached
+// monitor (DETACHED_PROCESS|CREATE_NO_WINDOW) and exits.
+//
+// It must NOT be the bare "service" (foreground monitor). At logon the entry is
+// launched by explorer.exe, which has no console, so Windows allocates a fresh
+// one for a console-subsystem child — the bare "service" therefore pops a
+// visible PseudoConsoleWindow in the user's face on every login. "service start"
+// daemonizes instead, leaving a windowless supervisor. (Verified with EnumWindows:
+// "service" => a visible PseudoConsoleWindow owned by the launched process;
+// "service start" => no visible window.)
+//
+// The combined `svc install --autostart` path instead launches "svc start" so
+// the trigger merely asks the SCM to start the already-installed service
+// (Google-style: service + trigger, one process). Kept in one place so the
+// Run-key value and the scheduled-task action stay identical for a given mode.
 const autostartVerb = "service"
 
+// autostartStartVerb daemonizes: it detaches the monitor and returns, so no
+// console window survives the logon launch.
+const autostartStartVerb = "start"
+
 // defaultLaunchArgs is what a standalone autostart entry runs.
-var defaultLaunchArgs = []string{autostartVerb}
+var defaultLaunchArgs = []string{autostartVerb, autostartStartVerb}
 
 // autostartEntry is a single reported autostart registration.
 type autostartEntry struct {
