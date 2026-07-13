@@ -1,4 +1,9 @@
 # daemon
+<!-- rev:001 -->
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/inovacc/daemon.svg)](https://pkg.go.dev/github.com/inovacc/daemon)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/inovacc/daemon)](go.mod)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
 
 A reusable Go **library** that gives any application the ability to run as a
 long-lived background service — foreground supervisor (monitor → worker with a

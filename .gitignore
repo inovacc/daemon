@@ -71,3 +71,5 @@ coverage.html
 .remember/
 nul
 CLAUDE.md
+
+docs/analysis/.harden/
